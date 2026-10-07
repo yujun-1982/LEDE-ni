@@ -76,9 +76,7 @@ jobs:
           echo "=== requested packages actually present ==="
           for s in CONFIG_PACKAGE_luci-theme-argon CONFIG_PACKAGE_luci-app-argon-config \
                    CONFIG_PACKAGE_luci-app-passwall CONFIG_PACKAGE_luci-app-softether \
-                   CONFIG_PACKAGE_softethervpn5-server CONFIG_PACKAGE_luci-app-timecontrol \
-                   CONFIG_PACKAGE_luci-i18n-base-zh-cn \
-                   CONFIG_PACKAGE_luci-i18n-argon-config-zh-cn \
+                   CONFIG_PACKAGE_luci-app-timecontrol CONFIG_LUCI_LANG_zh_Hans \
                    CONFIG_PACKAGE_ruby CONFIG_PACKAGE_dnsmasq-full; do
             grep "^${s}=" .config || echo "MISSING: ${s}"
           done
@@ -89,6 +87,21 @@ jobs:
           make defconfig
           echo "=== target image selection ==="
           grep -E '^CONFIG_(TARGET_ROOTFS|TARGET_IMAGES|GRUB|EFI_IMAGES|VDI_IMAGES|QCOW_IMAGES|VMDK_IMAGES|TARGET_KERNEL_PARTSIZE|TARGET_ROOTFS_PARTSIZE)' .config
+          echo "=== hard verification of the resolved config ==="
+          # Symbols silently dropped by Kconfig (unknown name, unmet dependency,
+          # or no prompt - the hidden luci-i18n-*-zh-cn packages) would still
+          # build fine and ship firmware missing the feature. Fail instead.
+          status=0
+          for s in CONFIG_TARGET_ROOTFS_SQUASHFS=y CONFIG_PACKAGE_luci-theme-argon=y \
+                   CONFIG_PACKAGE_luci-app-argon-config=y CONFIG_PACKAGE_luci-app-passwall=y \
+                   CONFIG_PACKAGE_luci-app-softether=y CONFIG_PACKAGE_luci-app-timecontrol=y \
+                   CONFIG_PACKAGE_softethervpn5-server=y CONFIG_PACKAGE_kmod-nft-offload=y \
+                   CONFIG_PACKAGE_luci-i18n-base-zh-cn=y \
+                   CONFIG_PACKAGE_luci-i18n-argon-config-zh-cn=y; do
+            grep -qxF "$s" .config || { echo "MISSING: $s"; status=1; }
+          done
+          echo "zh-cn translation packages resolved: $(grep -cE '^CONFIG_PACKAGE_luci-i18n-.*zh-cn=y$' .config)"
+          [ "$status" -eq 0 ] || exit 1
 
       - name: Download sources
         working-directory: openwrt

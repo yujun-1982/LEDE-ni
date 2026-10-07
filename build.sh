@@ -8,9 +8,10 @@
 #   3. add the plugin feeds and clone the Argon theme
 #   4. apply seed.config as .config and files/ as the rootfs overlay
 #   5. run 'make defconfig' to resolve dependencies
-#   6. print the compile command
+#   6. verify no requested symbol was silently dropped
+#   7. print the compile command
 #
-# It never compiles the firmware itself - step 6 is run by you, so a long
+# It never compiles the firmware itself - step 7 is run by you, so a long
 # build stays under your control.
 #
 # IMPORTANT: the custom feed is this directory, NOT the GitHub URL, so that
@@ -118,6 +119,35 @@ info "files/ -> ${OPENWRT_DIR}/files/"
 step "Step 5: Resolve dependencies"
 make defconfig
 info ".config expanded"
+
+# A symbol that is absent from the generated .config was silently dropped by
+# Kconfig - unknown name, unsatisfied dependency, or no prompt to set it from
+# (that is how the hidden luci-i18n-*-zh-cn packages behave). The build would
+# still succeed and produce firmware with the feature missing, so fail here.
+step "Step 6: Verify the resolved configuration"
+required_symbols="
+CONFIG_TARGET_ROOTFS_SQUASHFS=y
+CONFIG_PACKAGE_luci-theme-argon=y
+CONFIG_PACKAGE_luci-app-argon-config=y
+CONFIG_PACKAGE_luci-app-passwall=y
+CONFIG_PACKAGE_luci-app-softether=y
+CONFIG_PACKAGE_luci-app-timecontrol=y
+CONFIG_PACKAGE_softethervpn5-server=y
+CONFIG_PACKAGE_kmod-nft-offload=y
+CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
+CONFIG_PACKAGE_luci-i18n-argon-config-zh-cn=y
+"
+missing=""
+for s in ${required_symbols}; do
+    grep -qxF "$s" .config || missing="${missing} ${s}"
+done
+if [ -n "${missing}" ]; then
+    error "defconfig dropped these symbols:${missing}"
+    error "Fix the name in seed.config, or select the package/dependency it needs."
+    exit 1
+fi
+i18n_count=$(grep -cE '^CONFIG_PACKAGE_luci-i18n-.*zh-cn=y$' .config || true)
+info "all required symbols present; ${i18n_count} Simplified Chinese translation packages"
 
 echo
 echo -e "${GREEN}Ready. Compile with:${NC}"

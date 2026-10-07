@@ -63,3 +63,8 @@ openwrt/bin/targets/x86/64/openwrt-x86-64-generic-squashfs-combined.img.gz
 4. `rpcd` 的 `timeout` 默认 30 秒，慢页面加载期间会话会过期。
 
 简体中文语言包和 Argon 设置页**已经包含**，不在此列。
+
+中文的启用方式有个坑：`luci-i18n-*-zh-cn` 在 Kconfig 里是**没有提示语（promptless）的隐藏 tristate**，
+在 seed.config 里逐个写 `CONFIG_PACKAGE_luci-i18n-xxx-zh-cn=y` 会被 `make defconfig` 静默丢弃，
+只能靠主开关 `CONFIG_LUCI_LANG_zh_Hans=y` 点亮。build.sh Step 6 与 CI 都会在 defconfig 之后
+逐条断言这些符号，被丢掉就直接报错，不会再产出"少功能但构建成功"的固件。
