@@ -1,0 +1,110 @@
+name: Build OpenWrt Custom Firmware
+
+# NOTE: keep secrets out of this repo. Subscription URLs, passwords and API
+# tokens must come from GitHub Secrets and be injected at build time - never
+# committed into seed.config or files/.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths-ignore: [ 'README.md' ]
+
+env:
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  build:
+    name: Build Firmware
+    runs-on: ubuntu-24.04
+    timeout-minutes: 720
+
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang flex bison g++ gawk \
+            gcc-multilib g++-multilib gettext git libncurses5-dev libssl-dev \
+            python3 python3-setuptools rsync swig unzip zlib1g-dev file wget \
+            libelf-dev ccache
+          sudo apt-get autoclean && sudo apt-get clean
+
+      - name: Clone OpenWrt source
+        run: git clone --depth 1 -b master https://github.com/openwrt/openwrt.git openwrt
+
+      - name: Inject feeds
+        working-directory: openwrt
+        run: |
+          sed -i '/^src-git[^ ]* passwall /d'        feeds.conf.default
+          sed -i '/^src-git[^ ]* passwall_pkgs /d'   feeds.conf.default
+          sed -i '/^src-git[^ ]* timecontrol /d'    feeds.conf.default
+
+          echo "src-git passwall https://github.com/xiaorouji/luci-app-passwall.git"        >> feeds.conf.default
+          echo "src-git passwall_pkgs https://github.com/xiaorouji/openwrt-passwall-packages.git" >> feeds.conf.default
+          echo "src-git timecontrol https://github.com/sirpdboy/luci-app-timecontrol.git"   >> feeds.conf.default
+
+          # Argon is a single-package repo (Makefile at the root), so it is not
+          # a valid feed. Clone it straight into the package tree instead.
+          mkdir -p package/feeds/argon
+          rm -rf package/feeds/argon/luci-theme-argon
+          git clone --depth 1 https://github.com/jerrykuku/luci-theme-argon.git \
+            package/feeds/argon/luci-theme-argon
+
+          echo "=== feeds.conf.default ==="
+          cat feeds.conf.default
+
+      - name: Update and install feeds
+        working-directory: openwrt
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          echo "=== feed install problems (must be empty) ==="
+          ./scripts/feeds install -a 2>&1 | grep -i 'ignoring feed' || echo "none"
+
+      - name: Apply seed.config and files overlay
+        working-directory: openwrt
+        run: |
+          cp "$GITHUB_WORKSPACE/seed.config" .config
+          rm -rf files
+          cp -r "$GITHUB_WORKSPACE/files" files
+          echo "=== requested packages actually present ==="
+          for s in CONFIG_PACKAGE_luci-theme-argon CONFIG_PACKAGE_luci-app-passwall \
+                   CONFIG_PACKAGE_luci-app-softether CONFIG_PACKAGE_luci-app-timecontrol \
+                   CONFIG_PACKAGE_ruby CONFIG_PACKAGE_dnsmasq-full; do
+            grep "^${s}=" .config || echo "MISSING: ${s}"
+          done
+
+      - name: Generate full .config via defconfig
+        working-directory: openwrt
+        run: |
+          make defconfig
+          echo "=== target image selection ==="
+          grep -E '^CONFIG_(TARGET_ROOTFS|TARGET_IMAGES|GRUB|EFI_IMAGES|VDI_IMAGES|QCOW_IMAGES|VMDK_IMAGES|TARGET_KERNEL_PARTSIZE|TARGET_ROOTFS_PARTSIZE)' .config
+
+      - name: Download sources
+        working-directory: openwrt
+        run: make -j$(nproc) download
+
+      - name: Compile firmware
+        working-directory: openwrt
+        run: make -j$(nproc) V=s 2>&1 | tail -200
+
+      - name: Collect artifacts
+        working-directory: openwrt
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/artifacts"
+          # combined images end in .img.gz - a plain *.img glob misses them
+          find bin/targets -type f \( -name '*.img.gz' -o -name '*.bin' -o -name '*.img' \
+            -o -name '*.manifest' -o -name '*.buildinfo' \) -exec cp {} "$GITHUB_WORKSPACE/artifacts/" \;
+          cp .config "$GITHUB_WORKSPACE/artifacts/config.build"
+          ls -la "$GITHUB_WORKSPACE/artifacts"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: openwrt-firmware-${{ github.sha }}
+          path: artifacts/
+          if-no-files-found: error

@@ -1,0 +1,78 @@
+#!/bin/sh
+#
+# 99-install-pkgs - install the pre-compiled .apk packages shipped in
+# files/root/precompiled-pkgs/ on first boot.
+#
+# Used for components that cannot be source-compiled here (proprietary Clash
+# cores, prebuilt desktop environment).
+#
+# NOTE: the uci-defaults framework deletes this script after it runs.
+#
+
+PKG_DIR="/root/precompiled-pkgs"
+LOG_FILE="/tmp/uci-defaults-99-install-pkgs.log"
+
+log() {
+	echo "[99-install-pkgs] $*" | tee -a "${LOG_FILE}"
+}
+
+detect_pkg_manager() {
+	if command -v apk >/dev/null 2>&1; then
+		echo "apk"
+	elif command -v opkg >/dev/null 2>&1; then
+		echo "opkg"
+	else
+		echo "none"
+	fi
+}
+
+PKG_MGR="$(detect_pkg_manager)"
+log "Detected package manager: ${PKG_MGR}"
+
+if [ "${PKG_MGR}" = "none" ]; then
+	log "ERROR: neither apk nor opkg is available. Skipping."
+	exit 1
+fi
+
+if [ ! -d "${PKG_DIR}" ] || [ -z "$(ls -A "${PKG_DIR}" 2>/dev/null)" ]; then
+	log "No pre-compiled packages in ${PKG_DIR}. Nothing to do."
+	exit 0
+fi
+
+log "Found pre-compiled packages in ${PKG_DIR}"
+
+failed=""
+out="${LOG_FILE}.out"
+
+for pkg in "${PKG_DIR}"/*.ipk "${PKG_DIR}"/*.apk; do
+	[ -f "${pkg}" ] || continue
+	log "Installing: ${pkg}"
+
+	case "${PKG_MGR}" in
+		opkg)	opkg install --force-depends "${pkg}" >"${out}" 2>&1 ;;
+		apk)	apk add --allow-untrusted "${pkg}" >"${out}" 2>&1 ;;
+	esac
+	rc=$?
+	cat "${out}" | tee -a "${LOG_FILE}"
+	rm -f "${out}"
+
+	# busybox ash has no PIPESTATUS, hence the explicit rc capture above.
+	if [ "${rc}" -ne 0 ]; then
+		log "ERROR: ${PKG_MGR} exited ${rc} for ${pkg}"
+		failed="${failed} ${pkg}"
+	fi
+done
+
+# Keep the directory when something failed, otherwise the .apk is gone for
+# good and the only way to retry is to re-flash.
+if [ -n "${failed}" ]; then
+	log "Retaining ${PKG_DIR}. Retry manually with:"
+	for f in ${failed}; do
+		log "  ${PKG_MGR} add --allow-untrusted ${f}"
+	done
+else
+	log "All packages installed. Cleaning up ${PKG_DIR}."
+	rm -rf "${PKG_DIR}"
+fi
+
+exit 0

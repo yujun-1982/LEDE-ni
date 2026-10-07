@@ -1,0 +1,13 @@
+# Shell scripts and UCI overlay files must keep LF. With core.autocrlf=true a
+# Windows checkout rewrites them to CRLF, which breaks the first-boot
+# uci-defaults installer and makes uhttpd/UCI fail to parse the config.
+*.sh                text eol=lf
+files/etc/**        text eol=lf
+seed.config         text eol=lf
+*.conf              text eol=lf
+.gitignore          text eol=lf
+.gitattributes      text eol=lf
+
+# Pre-compiled packages are binary
+*.apk               binary
+*.ipk               binary

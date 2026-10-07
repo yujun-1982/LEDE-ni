@@ -1,0 +1,17 @@
+# OpenWrt source tree prepared by build.sh (huge, never commit)
+/openwrt/
+
+# Local build output / downloaded CI artifacts
+/artifacts/
+/open/
+
+# Editor and OS cruft
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# NOTE: files/root/precompiled-pkgs/*.apk ARE committed on purpose - they are
+# the closed-source components. Any single file above 100 MB must go through
+# Git LFS instead:  git lfs track "*.apk"
