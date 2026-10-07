@@ -26,7 +26,7 @@ openwrt/bin/targets/x86/64/openwrt-x86-64-generic-squashfs-combined.img.gz
 | 架构 | x86/64，generic |
 | Rootfs | squashfs（只读 + journaling overlay） |
 | 分区 | Kernel 256 MiB / Rootfs 1024 MiB |
-| 引导 | GRUB，串口 ttyS0 @115200，`quiet loglevel=0`，timeout 0 |
+| 引导 | GRUB，串口控制台开启 @115200，`quiet loglevel=0`，timeout `0`，无 EFI |
 | 镜像格式 | 仅 gzip 压缩的 `.img.gz`（不出 ext4 / EFI / VDI / QCOW2 / VMDK） |
 | LAN | `br-lan` 桥接（成员口 `eth0`）静态 `10.10.10.2/24` |
 | root 密码 | 空 |
