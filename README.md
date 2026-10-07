@@ -42,12 +42,29 @@ openwrt/bin/targets/x86/64/openwrt-x86-64-generic-squashfs-combined.img.gz
 | `luci-app-argon-config` | `jerrykuku/luci-app-argon-config` master | **独立仓库**（主题仓库里没有它），同样直接 clone。提供 系统 → Argon 设置 |
 | `luci-app-passwall` | `xiaorouji/luci-app-passwall` + `xiaorouji/openwrt-passwall-packages` | 需要两个 feed |
 | `luci-app-softether` | 官方 `luci` feed | 界面在 **状态 → SoftEther 状态**；VPN 二进制 `softethervpn5-*` 来自 `packages` feed |
-| `softethervpn5-server` | 官方 `packages` feed | **服务端**。`luci-app-softether` 只依赖 client，所以必须显式勾选。开机后需自行 `/etc/init.d/softethervpn-server enable && start` |
+| `softethervpn5-server` | 官方 `packages` feed | **服务端**。`luci-app-softether` 只依赖 client，所以必须显式勾选。开机自启由 `files/etc/uci-defaults/97-enable-softethervpn-server` 处理；注意 init 脚本名是 `softethervpnserver`，**没有连字符** |
 | `luci-app-timecontrol` | `sirpdboy/luci-app-timecontrol` | 上网时间控制 |
 | OpenClash | `files/root/precompiled-pkgs/*.apk` | 含闭源 mihomo 核心 |
 | NinjaDesktop Lite | `files/root/precompiled-pkgs/*.apk` | 桌面环境 |
 
 两个 `.apk` 由 `files/etc/uci-defaults/99-install-pkgs` 在**首次开机**时安装。它们的运行时依赖（`ruby`、`ruby-yaml`、`unzip`、`ca-bundle`、`dnsmasq-full` 等）已经全部写进 `seed.config` 编进镜像，所以**没有网络也能装**。若某个插件开机后不见了，看 `/tmp/uci-defaults-99-install-pkgs.log`——失败时脚本会保留 `/root/precompiled-pkgs` 并打印重试命令。
+
+## SoftEther 服务端开机自启
+
+`files/etc/uci-defaults/97-enable-softethervpn-server` 在首次开机时 `enable` + `start`，
+并检查 `/etc/rc.d/` 里的启动链接是否真的建立，结果写到 `/tmp/uci-defaults-97-softethervpn.log`。
+包本身只装脚本不自启，所以这一步是必须的。
+
+两点要知道：
+
+1. **443 端口冲突**。uhttpd 默认配置里 `list listen_https 0.0.0.0:443`，而 SoftEther 新建
+   `vpn_server.config` 时默认也用 443。刷机后先确认占用情况：
+   `netstat -ltnp | grep -E ':(443|5555|992)\b'`。
+   要挪开 SoftEther：`vpncmd` 连本机 → `ServerPortNum` 改成别的端口。
+2. **首次开机没有管理密码**，也没有虚拟 hub。要建 hub 和用户才能连：
+   `vpncmd` → `ServerCertCreate`/`HubCreate`/`UserCreate`，或用 SecureConsoleServer。
+   另外 `files/etc/config/network` 按清单只定义了 `br-lan`，没有 wan 口和端口转发规则，
+   所以外网目前连不进来，需要从 LAN 侧访问或自行补防火墙规则。
 
 ## 安全提醒
 
