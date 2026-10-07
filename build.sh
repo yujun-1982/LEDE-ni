@@ -37,6 +37,7 @@ OPENWRT_DIR="openwrt"
 # It is a single-package repo (Makefile at the root), so 'scripts/feeds'
 # cannot treat it as a feed; it is cloned straight into package/feeds/.
 ARGON_FEED_URL="https://github.com/jerrykuku/luci-theme-argon.git"
+ARGON_CONFIG_FEED_URL="https://github.com/jerrykuku/luci-app-argon-config.git"
 
 # PassWall needs TWO feeds: the LuCI app plus its backend packages.
 PASSWALL_FEED_NAME="passwall"
@@ -82,10 +83,14 @@ echo "src-git ${PASSWALL_FEED_NAME} ${PASSWALL_FEED_URL}"          >> feeds.conf
 echo "src-git ${PASSWALL_PKG_FEED_NAME} ${PASSWALL_PKG_FEED_URL}"  >> feeds.conf.default
 echo "src-git ${TIMECONTROL_FEED_NAME} ${TIMECONTROL_FEED_URL}"    >> feeds.conf.default
 
+# Argon is two single-package repos (Makefile at the root), so 'scripts/feeds'
+# cannot treat either as a feed; they are cloned straight into package/feeds/.
+# The config app lives in its own repo and provides 系统 -> Argon 设置.
 mkdir -p package/feeds/argon
-rm -rf package/feeds/argon/luci-theme-argon
+rm -rf package/feeds/argon/luci-theme-argon package/feeds/argon/luci-app-argon-config
 git clone --depth 1 "${ARGON_FEED_URL}" package/feeds/argon/luci-theme-argon
-info "argon theme cloned into package/feeds/argon/"
+git clone --depth 1 "${ARGON_CONFIG_FEED_URL}" package/feeds/argon/luci-app-argon-config
+info "argon theme + config app cloned into package/feeds/argon/"
 
 ./scripts/feeds update -a
 ./scripts/feeds install -a
