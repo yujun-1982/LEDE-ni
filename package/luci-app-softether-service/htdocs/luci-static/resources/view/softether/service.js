@@ -12,6 +12,7 @@
  */
 
 var initd = '/etc/init.d/softethervpnserver';
+var vpncmd = '/usr/bin/vpncmd';
 var svcName = 'softethervpnserver';
 
 var callServiceList = rpc.declare({
@@ -95,6 +96,30 @@ function button(label, cls, args) {
 	}, label);
 }
 
+/*
+ * SoftEther holds hub/user changes in memory until it is told to write them
+ * out, so give the operator a way to flush without stopping the service.
+ */
+function runFlush() {
+	ui.addNotification(null, E('p', '正在保存配置'), 'info');
+
+	return fs.exec(vpncmd, [ 'localhost:5555', '/server', '/CMD', 'Flush' ]).then(function(res) {
+		if (res.code !== 0) {
+			ui.addNotification(null, E('p', [
+				'保存失败，命令返回状态 ' + res.code,
+				res.stderr ? E('br') : null,
+				res.stderr ? String(res.stderr).trim() : null
+			]), 'error');
+
+			return;
+		}
+
+		ui.addNotification(null, E('p', '配置已写入 /etc/softethervpn-server/vpn_server.config'), 'success');
+	}).catch(function(e) {
+		ui.addNotification(null, E('p', '保存失败：' + (e && e.message ? e.message : e)), 'error');
+	});
+}
+
 function row(key, value) {
 	return E('tr', { class: 'tr' }, [
 		E('td', { class: 'td', style: 'width:33%' }, key),
@@ -134,6 +159,11 @@ return view.extend({
 				button('启动', 'primary', [ 'start' ]),
 				button('停止', 'danger', [ 'stop' ]),
 				button('重启', 'warning', [ 'restart' ]),
+				E('button', {
+					class: 'btn secondary',
+					style: 'margin-right:.4em',
+					click: function() { return runFlush(); }
+				}, '保存配置到磁盘'),
 				st.boot
 					? button('取消开机自启', 'secondary', [ 'disable' ])
 					: button('设为开机自启', 'secondary', [ 'enable' ])
@@ -141,7 +171,12 @@ return view.extend({
 
 			E('div', { class: 'alert-message' }, E('p', [
 				'配置文件保存在 ', E('code', '/etc/softethervpn-server/vpn_server.config'),
-				'（可写 overlay，重启不丢，也已加入 sysupgrade 备份清单）。',
+				'（可写 overlay，已加入 sysupgrade 备份清单）。',
+				E('br'),
+				'但 SoftEther 平时把改动留在内存里，只在收到 ', E('code', 'Flush'),
+				' 或正常停止服务时才写盘：新建/修改 HUB、用户、端口后请点 ',
+				E('b', '保存配置到磁盘'),
+				'（本镜像的 init 脚本已会在 stop 前自动 Flush，正常 reboot 也会落盘；直接断电则未 Flush 的改动会丢）。',
 				E('br'),
 				'默认监听端口：443、992、1194、5555。',
 				E('br'),
@@ -150,13 +185,15 @@ return view.extend({
 				' 确认）。',
 				E('br'),
 				'首次使用需要先设置服务端管理密码并创建虚拟 HUB：',
-				E('code', 'vpncmd localhost /server'),
+				E('code', 'vpncmd localhost:5555 /server'),
 				' 内执行 ',
 				E('code', 'ServerPasswordSet'),
 				'、',
 				E('code', 'HubCreate'),
 				'、',
 				E('code', 'UserCreate'),
+				'，最后 ',
+				E('code', 'Flush'),
 				'。'
 			]))
 		]);

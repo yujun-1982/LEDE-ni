@@ -14,6 +14,21 @@ USE_PROCD=1
 STORE=/etc/softethervpn-server
 STOCK=/usr/libexec/softethervpn
 
+# SoftEther keeps hub/user/listener changes in memory. vpn_server.config is only
+# rewritten when it is told to (the management command 'Flush') or when the
+# daemon shuts down gracefully, so a configuration that was just created is
+# still lost if power is cut. Flushing on stop makes every stop - and therefore
+# every restart and every reboot, which runs the rc.d kill link - deterministic.
+flush_conf() {
+	[ -x /usr/bin/vpncmd ] || return 0
+	pgrep -x vpnserver >/dev/null 2>&1 || return 0
+	timeout 10 /usr/bin/vpncmd localhost:5555 /server /CMD Flush </dev/null >/dev/null 2>&1
+}
+
+stop_service() {
+	flush_conf
+}
+
 start_service() {
 	mkdir -p -m 0755 "${STORE}"
 

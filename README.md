@@ -125,9 +125,19 @@ wg genkey | tee privatekey | wg pubkey > publickey
 - `97-softethervpn-server-no-autostart` 顺手把 `/etc/softethervpn-server` 加进
   `/etc/sysupgrade.conf`，带配置升级时配置一起保留。
 
-注意两点：在服务端上直接 `apk add --upgrade softethervpn5-server` 会用上游脚本覆盖我们这份，
-升级后需要重新刷本仓库的镜像（或手工恢复）；另外 SoftEther 若开启日志，日志也落在
-`/etc/softethervpn-server`，长期大量写日志会消耗闪存，建议只在排障时开。
+注意三点：
+
+1. **改动要 Flush 才写盘。** 真机验证过：`HubCreate`/`UserCreate` 之后 `vpn_server.config` 的 md5、大小、mtime
+   全都不变，运行中的服务却能看到新 HUB —— SoftEther 5.x 把改动留在内存，只在收到管理命令 `Flush`
+   或**正常停止服务**时才写文件。本仓库的 init 脚本已经在 `stop_service()` 里先 `Flush` 再让 procd 杀进程，
+   所以 `stop`、`restart`、正常 `reboot`（走 rc.d 的 K 链接）都会落盘；**直接断电/`reboot -f` 则会丢掉没
+   Flush 的改动**。页面上有"保存配置到磁盘"按钮，命令行为
+   `vpncmd localhost:5555 /server /CMD Flush`。
+2. 在服务端上直接 `apk add --upgrade softethervpn5-server` 会用上游脚本覆盖我们这份，
+   升级后需要重新刷本仓库的镜像（或手工恢复）；另外 SoftEther 若开启日志，日志也落在
+   `/etc/softethervpn-server`，长期大量写日志会消耗闪存，建议只在排障时开。
+3. `vpncmd` 的正确形式是 `vpncmd localhost:5555 /server /CMD <命令>`（参数是 `/SERVER`，不是 `/device`）；
+   `HubCreate` 会交互式询问 HUB 密码，脚本化时要么喂换行、要么在交互界面里做。
 
 ## 安全提醒
 
