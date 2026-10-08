@@ -28,8 +28,8 @@ openwrt/bin/targets/x86/64/openwrt-x86-64-generic-squashfs-combined.img.gz
 | 分区 | Kernel 256 MiB / Rootfs 1024 MiB |
 | 引导 | GRUB，串口控制台开启 @115200，`quiet loglevel=0`，timeout `0`，无 EFI |
 | 镜像格式 | 仅 gzip 压缩的 `.img.gz`（不出 ext4 / EFI / VDI / QCOW2 / VMDK） |
-| LAN | `br-lan` 桥接（成员口 `eth0`）静态 `10.10.10.170/24` |
-| root 密码 | `111111`（见"安全提醒"） |
+| LAN | `br-lan` 桥接（成员口 `eth0`）静态 `10.10.10.2/24` |
+| root 密码 | **空**（本仓库不再写入密码；Web 界面直接进，SSH 密码登录会被 dropbear 拒绝，见"安全提醒"） |
 | 主题 | Argon + Argon 设置页（`files/etc/uci-defaults/96-set-luci-ui` 设 mediaurlbase） |
 | 语言 | 简体中文（`luci.main.lang='zh_cn'`，翻译包由 `CONFIG_LUCI_LANG_zh_Hans` 点亮，见下） |
 | 分流 | 官方 nftables flow offloading（`files/etc/config/firewall` 的 lan zone） |
@@ -102,7 +102,7 @@ wg genkey | tee privatekey | wg pubkey > publickey
    `/etc/init.d/uhttpd` 的 `generate_keys()` 什么也生成不出来，`/etc/uhttpd.crt`/`.key`
    不存在，uhttpd 只挂 80 端口。要让 HTTPS 开箱可用，在 `seed.config` 里加
    `CONFIG_PACKAGE_px5g-mbedtls=y` 重新构建即可（当前按决定保持不变）。
-3. **没有虚拟 hub 和用户**。root 密码是 `111111`（见"安全提醒"），但服务端首次启动仍要
+3. **没有虚拟 hub 和用户**。root 是空密码（Web 界面直接进），服务端首次启动仍要
    `vpncmd` → `ServerPasswordSet`/`HubCreate`/`UserCreate` 才能连。另外
    `files/etc/config/network` 按清单只定义了 `br-lan`，没有 wan 口和端口转发规则，
    所以外网目前连不进来，需要从 LAN 侧访问或自行补防火墙规则。
@@ -143,9 +143,14 @@ wg genkey | tee privatekey | wg pubkey > publickey
 
 订阅链接、API token 一律**不要提交进本仓库**，放 GitHub Secrets 构建时注入。
 
-例外（用户明确要求）：root 密码 `111111` 以 SHA-512 crypt 哈希的形式写在
-`files/etc/uci-defaults/98-set-root-password` 里。本仓库是 **public**，`111111` 属于弱口令，
-哈希可被离线爆破，所以这套固件**不要直接暴露到公网**；要改密码就重新生成哈希替换该文件里的 `HASH=`。
+本镜像的 root 是**空密码**（出厂镜像里 `/etc/shadow` 的 root 字段为空：`root:::0:99999:7:::`，
+仓库不再写入任何密码）。后果要知道清楚：
+
+- Web 界面可以空密码直接登录；
+- **SSH 用密码登录会失败**——dropbear 即使 `PasswordAuth`/`RootPasswordAuth` 为 `on`，也默认拒绝空密码。
+  要用 SSH 就在 系统 → 管理权 里先设一个密码，或给 dropbear 增加 `-B`（允许空密码）；
+- 因此这套固件同样**不要直接暴露到公网**；SoftEther 服务端的管理密码也必须单独用
+  `ServerPasswordSet` 设置，不能指望 root 的口令。
 
 ## 已知未包含的东西
 
