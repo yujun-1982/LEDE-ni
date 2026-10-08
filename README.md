@@ -28,7 +28,7 @@ openwrt/bin/targets/x86/64/openwrt-x86-64-generic-squashfs-combined.img.gz
 | 分区 | Kernel 256 MiB / Rootfs 1024 MiB |
 | 引导 | GRUB，串口控制台开启 @115200，`quiet loglevel=0`，timeout `0`，无 EFI |
 | 镜像格式 | 仅 gzip 压缩的 `.img.gz`（不出 ext4 / EFI / VDI / QCOW2 / VMDK） |
-| LAN | `br-lan` 桥接（成员口 `eth0`）静态 `10.10.10.2/24` |
+| LAN | `br-lan` 桥接（成员口 `eth0`）静态 `10.10.10.170/24` |
 | root 密码 | `111111`（见"安全提醒"） |
 | 主题 | Argon + Argon 设置页（`files/etc/uci-defaults/96-set-luci-ui` 设 mediaurlbase） |
 | 语言 | 简体中文（`luci.main.lang='zh_cn'`，翻译包由 `CONFIG_LUCI_LANG_zh_Hans` 点亮，见下） |
