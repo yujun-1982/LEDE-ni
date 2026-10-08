@@ -1,0 +1,25 @@
+{
+	"admin/vpn": {
+		"title": "VPN",
+		"order": 45,
+		"action": {
+			"type": "firstchild",
+			"recurse": true
+		},
+		"depends": {
+			"acl": [ "luci-app-softether-service" ]
+		}
+	},
+
+	"admin/vpn/softether": {
+		"title": "SoftEther VPN Service",
+		"order": 10,
+		"action": {
+			"type": "view",
+			"path": "softether/service"
+		},
+		"depends": {
+			"acl": [ "luci-app-softether-service" ]
+		}
+	}
+}

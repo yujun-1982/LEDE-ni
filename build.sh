@@ -46,6 +46,9 @@ PASSWALL_FEED_URL="https://github.com/xiaorouji/luci-app-passwall.git"
 PASSWALL_PKG_FEED_NAME="passwall_pkgs"
 PASSWALL_PKG_FEED_URL="https://github.com/xiaorouji/openwrt-passwall-packages.git"
 
+# Packages kept in this repo's package/ directory, exposed as a src-link feed.
+CUSTOM_FEED_NAME="custom"
+
 # TimeControl (schedule-based access control).
 TIMECONTROL_FEED_NAME="timecontrol"
 TIMECONTROL_FEED_URL="https://github.com/sirpdboy/luci-app-timecontrol.git"
@@ -83,6 +86,12 @@ done
 echo "src-git ${PASSWALL_FEED_NAME} ${PASSWALL_FEED_URL}"          >> feeds.conf.default
 echo "src-git ${PASSWALL_PKG_FEED_NAME} ${PASSWALL_PKG_FEED_URL}"  >> feeds.conf.default
 echo "src-git ${TIMECONTROL_FEED_NAME} ${TIMECONTROL_FEED_URL}"    >> feeds.conf.default
+
+# Packages maintained inside this repo (package/luci-app-softether-service).
+# A src-link feed keeps them versioned with the config instead of needing a
+# separate repository.
+sed -i "/^src-link[^ ]* ${CUSTOM_FEED_NAME} /d" feeds.conf.default
+echo "src-link ${CUSTOM_FEED_NAME} ${SCRIPT_DIR}/package" >> feeds.conf.default
 
 # Argon is two single-package repos (Makefile at the root), so 'scripts/feeds'
 # cannot treat either as a feed; they are cloned straight into package/feeds/.
@@ -130,7 +139,7 @@ CONFIG_TARGET_ROOTFS_SQUASHFS=y
 CONFIG_PACKAGE_luci-theme-argon=y
 CONFIG_PACKAGE_luci-app-argon-config=y
 CONFIG_PACKAGE_luci-app-passwall=y
-CONFIG_PACKAGE_luci-app-softether=y
+CONFIG_PACKAGE_luci-app-softether-service=y
 CONFIG_PACKAGE_luci-app-timecontrol=y
 CONFIG_PACKAGE_softethervpn5-server=y
 CONFIG_PACKAGE_kmod-nft-offload=y

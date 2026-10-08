@@ -41,10 +41,14 @@ jobs:
           sed -i '/^src-git[^ ]* passwall /d'        feeds.conf.default
           sed -i '/^src-git[^ ]* passwall_pkgs /d'   feeds.conf.default
           sed -i '/^src-git[^ ]* timecontrol /d'    feeds.conf.default
+          sed -i '/^src-link[^ ]* custom /d'        feeds.conf.default
 
           echo "src-git passwall https://github.com/xiaorouji/luci-app-passwall.git"        >> feeds.conf.default
           echo "src-git passwall_pkgs https://github.com/xiaorouji/openwrt-passwall-packages.git" >> feeds.conf.default
           echo "src-git timecontrol https://github.com/sirpdboy/luci-app-timecontrol.git"   >> feeds.conf.default
+
+          # Packages maintained in this repo's package/ directory.
+          echo "src-link custom $GITHUB_WORKSPACE/package" >> feeds.conf.default
 
           # Argon is a single-package repo (Makefile at the root), so it is not
           # a valid feed. Clone it straight into the package tree instead.
@@ -75,7 +79,7 @@ jobs:
           cp -r "$GITHUB_WORKSPACE/files" files
           echo "=== requested packages actually present ==="
           for s in CONFIG_PACKAGE_luci-theme-argon CONFIG_PACKAGE_luci-app-argon-config \
-                   CONFIG_PACKAGE_luci-app-passwall CONFIG_PACKAGE_luci-app-softether \
+                   CONFIG_PACKAGE_luci-app-passwall CONFIG_PACKAGE_luci-app-softether-service \
                    CONFIG_PACKAGE_luci-app-timecontrol CONFIG_LUCI_LANG_zh_Hans \
                    CONFIG_PACKAGE_ruby CONFIG_PACKAGE_dnsmasq-full; do
             grep "^${s}=" .config || echo "MISSING: ${s}"
@@ -94,7 +98,7 @@ jobs:
           status=0
           for s in CONFIG_TARGET_ROOTFS_SQUASHFS=y CONFIG_PACKAGE_luci-theme-argon=y \
                    CONFIG_PACKAGE_luci-app-argon-config=y CONFIG_PACKAGE_luci-app-passwall=y \
-                   CONFIG_PACKAGE_luci-app-softether=y CONFIG_PACKAGE_luci-app-timecontrol=y \
+                   CONFIG_PACKAGE_luci-app-softether-service=y CONFIG_PACKAGE_luci-app-timecontrol=y \
                    CONFIG_PACKAGE_softethervpn5-server=y CONFIG_PACKAGE_kmod-nft-offload=y \
                    CONFIG_PACKAGE_luci-i18n-base-zh-cn=y \
                    CONFIG_PACKAGE_luci-i18n-argon-config-zh-cn=y; do

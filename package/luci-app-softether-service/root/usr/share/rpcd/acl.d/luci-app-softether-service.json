@@ -1,0 +1,23 @@
+{
+	"luci-app-softether-service": {
+		"description": "Grant access to SoftEther VPN Server service control",
+		"read": {
+			"file": {
+				"/etc/init.d/softethervpnserver enabled": [ "exec" ],
+				"/etc/init.d/softethervpnserver status": [ "exec" ]
+			},
+			"ubus": {
+				"service": [ "list" ]
+			}
+		},
+		"write": {
+			"file": {
+				"/etc/init.d/softethervpnserver disable": [ "exec" ],
+				"/etc/init.d/softethervpnserver enable": [ "exec" ],
+				"/etc/init.d/softethervpnserver restart": [ "exec" ],
+				"/etc/init.d/softethervpnserver start": [ "exec" ],
+				"/etc/init.d/softethervpnserver stop": [ "exec" ]
+			}
+		}
+	}
+}

@@ -41,8 +41,14 @@ openwrt/bin/targets/x86/64/openwrt-x86-64-generic-squashfs-combined.img.gz
 | `luci-theme-argon` | `jerrykuku/luci-theme-argon` master | 单包仓库，**不能**当 feed 注册，build 脚本直接 clone 到 `package/feeds/argon/` |
 | `luci-app-argon-config` | `jerrykuku/luci-app-argon-config` master | **独立仓库**（主题仓库里没有它），同样直接 clone。提供 系统 → Argon 设置 |
 | `luci-app-passwall` | `xiaorouji/luci-app-passwall` + `xiaorouji/openwrt-passwall-packages` | 需要两个 feed |
-| `luci-app-softether` | 官方 `luci` feed | 界面在 **状态 → SoftEther 状态**；VPN 二进制 `softethervpn5-*` 来自 `packages` feed |
-| `softethervpn5-server` | 官方 `packages` feed | **服务端**。`luci-app-softether` 只依赖 client，所以必须显式勾选。开机自启由 `files/etc/uci-defaults/97-enable-softethervpn-server` 处理；注意 init 脚本名是 `softethervpnserver`，**没有连字符** |
+| `luci-app-softether-service` | **本仓库自带**（`package/`，以 `src-link custom` 注册为 feed） | 菜单 **VPN → SoftEther VPN Service**：显示运行状态/PID/开机自启，提供启动、停止、重启、自启开关 |
+| `softethervpn5-server` | 官方 `packages` feed | **服务端**。没有任何 LuCI 应用会拉它，必须显式勾选。开机自启由 `files/etc/uci-defaults/97-enable-softethervpn-server` 处理；注意 init 脚本名是 `softethervpnserver`，**没有连字符** |
+
+上游的 `luci-app-softether` **已刻意移除**：它唯一的页面列的是 SoftEther **客户端**的虚拟网卡和账号
+（helper 里全是 `vpncmd localhost /client ...`），对服务端部署没有意义；而且在 LuCI Master 下它用
+`fs.exec_direct()` 请求 `/cgi-bin/cgi-exec`，被 rpcd 以 **403（Access to command denied by ACL）** 拒绝，
+页面就永远停在"正在加载账号信息"。我们自己的页面改用 ubus 的 `fs.exec()` 与 `service list`，
+并且每个分支都带 `.catch()`，不会再出现无限加载。
 | `luci-app-timecontrol` | `sirpdboy/luci-app-timecontrol` | 上网时间控制 |
 | OpenClash | `files/root/precompiled-pkgs/*.apk` | 含闭源 mihomo 核心 |
 | NinjaDesktop Lite | `files/root/precompiled-pkgs/*.apk` | 桌面环境 |
