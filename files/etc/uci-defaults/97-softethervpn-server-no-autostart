@@ -48,6 +48,15 @@ LOG='/tmp/uci-defaults-97-softethervpn.log'
 	else
 		echo "running: no"
 	fi
+
+	# files/etc/init.d/softethervpnserver stores the configuration in
+	# /etc/softethervpn-server. /etc survives reboots on its own, but a sysupgrade
+	# only carries over what base-files and this list name, so add it once.
+	if [ -f /etc/sysupgrade.conf ] && ! grep -qx '/etc/softethervpn-server' /etc/sysupgrade.conf; then
+		echo '/etc/softethervpn-server' >> /etc/sysupgrade.conf
+		echo "sysupgrade backup: added /etc/softethervpn-server"
+	fi
+	echo "sysupgrade backup: $(grep -c '/etc/softethervpn-server' /etc/sysupgrade.conf 2>/dev/null || echo 0) entry"
 	echo "to start it:  /etc/init.d/softethervpnserver start"
 	echo "             or VPN -> SoftEther VPN Service in the web UI"
 	echo "to autostart: /etc/init.d/softethervpnserver enable"

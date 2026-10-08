@@ -1,0 +1,55 @@
+#!/bin/sh /etc/rc.common
+
+START=91
+USE_PROCD=1
+
+# The package's own init script keeps its data directory in /var/softethervpn,
+# but /var is a symlink to /tmp (tmpfs) on this image, and it only links
+# vpn_server.config to the package's empty placeholder (files/dummy). So every
+# listener, virtual hub and user lives in RAM and is gone after a reboot.
+#
+# This copy runs the server out of a real directory on the writable overlay
+# instead, so the configuration survives reboots and sysupgrade.
+
+STORE=/etc/softethervpn-server
+STOCK=/usr/libexec/softethervpn
+
+start_service() {
+	mkdir -p -m 0755 "${STORE}"
+
+	# vpnserver looks for hamcore.se2 and vpn_server.config next to the binary it
+	# was started from, and that path is resolved through symlinks, so the binary
+	# itself has to be a real file inside ${STORE}. It is only a stub that pulls in
+	# libsoftethervpn-server.so, so copying it costs 12 KiB. Refreshed on every
+	# start so a package upgrade cannot leave a stale binary behind.
+	if [ ! -f "${STORE}/vpnserver" ] || ! cmp -s "${STOCK}/vpnserver" "${STORE}/vpnserver"; then
+		cp "${STOCK}/vpnserver" "${STORE}/vpnserver"
+		chmod 0755 "${STORE}/vpnserver"
+	fi
+
+	# Read-only bulk data: link it, do not copy 5 MiB of hamcore onto the flash.
+	[ -e "${STORE}/hamcore.se2" ] || ln -sf "${STOCK}/hamcore.se2" "${STORE}/"
+	[ -e "${STORE}/lang.config" ] || ln -sf "${STOCK}/lang.config" "${STORE}/"
+
+	# First start: seed an empty config, or rescue one written by the old
+	# /var/softethervpn layout while this new script was being installed.
+	if [ ! -s "${STORE}/vpn_server.config" ]; then
+		if [ -f /var/softethervpn/vpn_server.config ] &&
+		   [ ! -L /var/softethervpn/vpn_server.config ] &&
+		   [ -s /var/softethervpn/vpn_server.config ]; then
+			cp /var/softethervpn/vpn_server.config "${STORE}/"
+			logger -t softethervpn5 "migrated /var/softethervpn/vpn_server.config into ${STORE}"
+		else
+			cp "${STOCK}/vpn_server.config" "${STORE}/vpn_server.config"
+		fi
+	fi
+
+	logger -t softethervpn5 "starting vpnserver from ${STORE}"
+
+	procd_open_instance
+	procd_set_param env LANG=en_US.UTF-8
+	procd_set_param cwd "${STORE}"
+	procd_set_param command "${STORE}/vpnserver" start --foreground
+	procd_set_param respawn
+	procd_close_instance
+}

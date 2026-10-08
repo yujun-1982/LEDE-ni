@@ -33,7 +33,7 @@ openwrt/bin/targets/x86/64/openwrt-x86-64-generic-squashfs-combined.img.gz
 | 主题 | Argon + Argon 设置页（`files/etc/uci-defaults/96-set-luci-ui` 设 mediaurlbase） |
 | 语言 | 简体中文（`luci.main.lang='zh_cn'`，翻译包由 `CONFIG_LUCI_LANG_zh_Hans` 点亮，见下） |
 | 分流 | 官方 nftables flow offloading（`files/etc/config/firewall` 的 lan zone） |
-| SoftEther | 服务端二进制已装，**默认不自启**（首次开机脚本显式 disable）；客户端不装 |
+| SoftEther | 服务端二进制已装，**默认不自启**（首次开机脚本显式 disable）；客户端不装；配置落在 `/etc/softethervpn-server`（重启不丢） |
 | Web 管理 | HTTP 80；443 已配置但**实际不监听**——镜像内没有证书生成器（`px5g`/`openssl` CLI 都没有），详见"SoftEther 服务端"一节 |
 
 ## 插件
@@ -106,6 +106,28 @@ wg genkey | tee privatekey | wg pubkey > publickey
    `vpncmd` → `ServerPasswordSet`/`HubCreate`/`UserCreate` 才能连。另外
    `files/etc/config/network` 按清单只定义了 `br-lan`，没有 wan 口和端口转发规则，
    所以外网目前连不进来，需要从 LAN 侧访问或自行补防火墙规则。
+
+## SoftEther 配置持久化（本仓库覆盖了它的 init 脚本）
+
+上游包自带的 `/etc/init.d/softethervpnserver` 把数据目录放在 `/var/softethervpn`，而这套镜像里
+**`/var` 是指向 `/tmp` 的符号链接（tmpfs）**，并且它只是把 `vpn_server.config` 软链到包里那个
+空的占位文件（`files/dummy`）。结果就是：新建的监听端口、虚拟 HUB、用户、管理密码全写在内存里，
+**一重启就没了**。
+
+本仓库用 `files/etc/init.d/softethervpnserver` 覆盖它（`files/` 是整文件替换，正好是这里想要的
+效果），把数据目录换成可写 overlay 上的真实目录 **`/etc/softethervpn-server`**：
+
+- `vpnserver` 以**实体副本**放在该目录（它只是个 12 KiB 的桩，真代码在 `libsoftethervpn-server.so`），
+  因为 vpnserver 是按"自己所在目录"去找 `hamcore.se2` 和 `vpn_server.config` 的，软链会被解析回
+  `/usr/libexec`（只读）。每次启动都用 `cmp` 校验并刷新副本，包升级后不会留下旧的桩。
+- `hamcore.se2`(5 MiB)、`lang.config` 用符号链接指回 `/usr/libexec/softethervpn`，不往闪存档里塞。
+- 首次启动写入空配置；若旧的 `/var/softethervpn/vpn_server.config` 里已有内容，会自动搬过来。
+- `97-softethervpn-server-no-autostart` 顺手把 `/etc/softethervpn-server` 加进
+  `/etc/sysupgrade.conf`，带配置升级时配置一起保留。
+
+注意两点：在服务端上直接 `apk add --upgrade softethervpn5-server` 会用上游脚本覆盖我们这份，
+升级后需要重新刷本仓库的镜像（或手工恢复）；另外 SoftEther 若开启日志，日志也落在
+`/etc/softethervpn-server`，长期大量写日志会消耗闪存，建议只在排障时开。
 
 ## 安全提醒
 

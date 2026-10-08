@@ -140,6 +140,9 @@ return view.extend({
 			]),
 
 			E('div', { class: 'alert-message' }, E('p', [
+				'配置文件保存在 ', E('code', '/etc/softethervpn-server/vpn_server.config'),
+				'（可写 overlay，重启不丢，也已加入 sysupgrade 备份清单）。',
+				E('br'),
 				'默认监听端口：443、992、1194、5555。',
 				E('br'),
 				'443 与 uhttpd 的 HTTPS 监听冲突，两者只会有一方拿到该端口（可用 ',
