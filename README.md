@@ -79,9 +79,13 @@ wg genkey | tee privatekey | wg pubkey > publickey
 
 ## SoftEther 服务端：默认不自启
 
-`files/etc/uci-defaults/97-softethervpn-server-no-autostart` 在首次开机时把
-`/etc/init.d/softethervpnserver` **disable** 并记录状态，结果写到
-`/tmp/uci-defaults-97-softethervpn.log`。它不会 `start`，也不会去动已经由人工启动的进程。
+装 `softethervpn5-server` 时镜像里会留下 `/etc/rc.d/S91softethervpnserver` 这个启动链接，
+所以**默认是会自启的**。`files/etc/uci-defaults/97-softethervpn-server-no-autostart` 在首次
+开机时把它 `disable` 掉并记录状态，日志在 `/tmp/uci-defaults-97-softethervpn.log`。
+`disable` 单独就够，是因为 uci-defaults 由 `/etc/init.d/boot` 执行、而它的 rc.d 链接是
+**S10boot**，rcorder 按顺序走，走到 S91 时链接已经没了。脚本不会 `start`，也不会去 `stop`
+已在运行的进程。带配置升级（sysupgrade）时 uci-defaults 会再跑一次，自启又会被关掉，
+需要自启就在页面上重新点"设为开机自启"。
 `softethervpn5-client` 也在 `seed.config` 里显式关掉，镜像里不再装客户端。
 
 要跑服务端就在 **VPN → SoftEther VPN Service** 页面上点"启动"或"设为开机自启"，

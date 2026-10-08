@@ -2,11 +2,18 @@
 #
 # 97-softethervpn-server-no-autostart - leave the SoftEther VPN server off.
 #
-# softethervpn5-server installs an init script but does not enable it, so a
-# fresh flash already has no autostart. This script only pins that state down
-# and records it, so an accidental 'enable' in an image or an upgrade can be
-# told apart from the intended default. It deliberately never starts the
-# server and never stops a server someone started by hand.
+# softethervpn5-server installs an init script, and installing the package
+# leaves a boot-time symlink /etc/rc.d/S91softethervpnserver in the image, so
+# the server would autostart. This script removes that autostart and records
+# the state; it never starts the server and never stops a running one.
+#
+# Why disable alone is enough on first boot: uci-defaults are executed from
+# /etc/init.d/boot, whose rc.d link is S10boot, and rcorder walks the list in
+# order - so the S91 symlink is gone before boot would honour it.
+#
+# After a config-preserving sysupgrade uci-defaults run again, which turns
+# autostart back off; re-enable it on the VPN -> SoftEther VPN Service page if
+# you want it to survive reboots.
 #
 # The script is named 'softethervpnserver' with no hyphen - the hyphenated
 # 'softethervpn-server' does not exist.
