@@ -33,6 +33,8 @@ openwrt/bin/targets/x86/64/openwrt-x86-64-generic-squashfs-combined.img.gz
 | 主题 | Argon + Argon 设置页（`files/etc/uci-defaults/96-set-luci-ui` 设 mediaurlbase） |
 | 语言 | 简体中文（`luci.main.lang='zh_cn'`，翻译包由 `CONFIG_LUCI_LANG_zh_Hans` 点亮，见下） |
 | 分流 | 官方 nftables flow offloading（`files/etc/config/firewall` 的 lan zone） |
+| SoftEther | 服务端二进制已装，**默认不自启**（首次开机脚本显式 disable）；客户端不装 |
+| Web 管理 | HTTP 80；443 已配置但**实际不监听**——镜像内没有证书生成器（`px5g`/`openssl` CLI 都没有），详见"SoftEther 服务端"一节 |
 
 ## 插件
 
@@ -42,7 +44,7 @@ openwrt/bin/targets/x86/64/openwrt-x86-64-generic-squashfs-combined.img.gz
 | `luci-app-argon-config` | `jerrykuku/luci-app-argon-config` master | **独立仓库**（主题仓库里没有它），同样直接 clone。提供 系统 → Argon 设置 |
 | `luci-app-passwall` | `xiaorouji/luci-app-passwall` + `xiaorouji/openwrt-passwall-packages` | 需要两个 feed |
 | `luci-app-softether-service` | **本仓库自带**（`package/`，以 `src-link custom` 注册为 feed） | 菜单 **VPN → SoftEther VPN Service**：显示运行状态/PID/开机自启，提供启动、停止、重启、自启开关 |
-| `softethervpn5-server` | 官方 `packages` feed | **服务端**。没有任何 LuCI 应用会拉它，必须显式勾选。开机自启由 `files/etc/uci-defaults/97-enable-softethervpn-server` 处理；注意 init 脚本名是 `softethervpnserver`，**没有连字符** |
+| `softethervpn5-server` | 官方 `packages` feed | **服务端**。没有任何 LuCI 应用会拉它，必须显式勾选。**默认不自启**，见"SoftEther 服务端"一节；注意 init 脚本名是 `softethervpnserver`，**没有连字符** |
 | WireGuard | 官方 `packages` feed | **只装组件，不预配置**：`kmod-wireguard` + `wireguard-tools` + `luci-proto-wireguard`。本仓库的 LuCI Master 版本里**没有** `luci-app-wireguard`，入口就是 `luci-proto-wireguard` 提供的"WireGuard 隧道"接口类型（网络 → 接口）。不预置接口/密钥/防火墙规则，理由见下 |
 
 上游的 `luci-app-softether` **已刻意移除**：它唯一的页面列的是 SoftEther **客户端**的虚拟网卡和账号
@@ -75,21 +77,30 @@ wg genkey | tee privatekey | wg pubkey > publickey
 
 两个 `.apk` 由 `files/etc/uci-defaults/99-install-pkgs` 在**首次开机**时安装。它们的运行时依赖（`ruby`、`ruby-yaml`、`unzip`、`ca-bundle`、`dnsmasq-full` 等）已经全部写进 `seed.config` 编进镜像，所以**没有网络也能装**。若某个插件开机后不见了，看 `/tmp/uci-defaults-99-install-pkgs.log`——失败时脚本会保留 `/root/precompiled-pkgs` 并打印重试命令。
 
-## SoftEther 服务端开机自启
+## SoftEther 服务端：默认不自启
 
-`files/etc/uci-defaults/97-enable-softethervpn-server` 在首次开机时 `enable` + `start`，
-并检查 `/etc/rc.d/` 里的启动链接是否真的建立，结果写到 `/tmp/uci-defaults-97-softethervpn.log`。
-包本身只装脚本不自启，所以这一步是必须的。
+`files/etc/uci-defaults/97-softethervpn-server-no-autostart` 在首次开机时把
+`/etc/init.d/softethervpnserver` **disable** 并记录状态，结果写到
+`/tmp/uci-defaults-97-softethervpn.log`。它不会 `start`，也不会去动已经由人工启动的进程。
+`softethervpn5-client` 也在 `seed.config` 里显式关掉，镜像里不再装客户端。
 
-两点要知道：
+要跑服务端就在 **VPN → SoftEther VPN Service** 页面上点"启动"或"设为开机自启"，
+或者命令行：`/etc/init.d/softethervpnserver start`（`enable` 是自启）。init 脚本名
+**没有连字符**，`softethervpn-server` 那个不存在。
 
-1. **443 端口冲突**。uhttpd 默认配置里 `list listen_https 0.0.0.0:443`，而 SoftEther 新建
-   `vpn_server.config` 时默认也用 443。刷机后先确认占用情况：
-   `netstat -ltnp | grep -E ':(443|5555|992)\b'`。
-   要挪开 SoftEther：`vpncmd` 连本机 → `ServerPortNum` 改成别的端口。
-2. **首次开机没有管理密码**，也没有虚拟 hub。要建 hub 和用户才能连：
-   `vpncmd` → `ServerCertCreate`/`HubCreate`/`UserCreate`，或用 SecureConsoleServer。
-   另外 `files/etc/config/network` 按清单只定义了 `br-lan`，没有 wan 口和端口转发规则，
+三点要知道：
+
+1. **443**：不自启时 SoftEther 不会占 443。若你手工启动服务端，它新建 `vpn_server.config`
+   时默认监听 443/992/1194/5555，会和 uhttpd 的 `listen_https` 撞。确认占用：
+   `netstat -ltnp | grep -E ':(443|5555|992)\b'`；改端口用 `vpncmd` 连本机 → `ServerPortNum`。
+2. **HTTPS 目前仍然不可用，原因不是端口**。镜像里没有证书生成器——`/usr/sbin/px5g` 和
+   `openssl` 命令行都不存在（只有 `libopenssl3`/`libmbedtls` 这些库），所以
+   `/etc/init.d/uhttpd` 的 `generate_keys()` 什么也生成不出来，`/etc/uhttpd.crt`/`.key`
+   不存在，uhttpd 只挂 80 端口。要让 HTTPS 开箱可用，在 `seed.config` 里加
+   `CONFIG_PACKAGE_px5g-mbedtls=y` 重新构建即可（当前按决定保持不变）。
+3. **没有虚拟 hub 和用户**。root 密码是 `111111`（见"安全提醒"），但服务端首次启动仍要
+   `vpncmd` → `ServerPasswordSet`/`HubCreate`/`UserCreate` 才能连。另外
+   `files/etc/config/network` 按清单只定义了 `br-lan`，没有 wan 口和端口转发规则，
    所以外网目前连不进来，需要从 LAN 侧访问或自行补防火墙规则。
 
 ## 安全提醒

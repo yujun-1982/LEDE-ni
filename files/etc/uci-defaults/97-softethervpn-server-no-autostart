@@ -1,0 +1,49 @@
+#!/bin/sh
+#
+# 97-softethervpn-server-no-autostart - leave the SoftEther VPN server off.
+#
+# softethervpn5-server installs an init script but does not enable it, so a
+# fresh flash already has no autostart. This script only pins that state down
+# and records it, so an accidental 'enable' in an image or an upgrade can be
+# told apart from the intended default. It deliberately never starts the
+# server and never stops a server someone started by hand.
+#
+# The script is named 'softethervpnserver' with no hyphen - the hyphenated
+# 'softethervpn-server' does not exist.
+#
+# Runs once on first boot and is then deleted by the uci-defaults framework.
+#
+
+INIT='/etc/init.d/softethervpnserver'
+LOG='/tmp/uci-defaults-97-softethervpn.log'
+
+{
+	echo "=== $(date) 97-softethervpn-server-no-autostart ==="
+
+	if [ ! -x "${INIT}" ]; then
+		echo "skip: ${INIT} not present (package not in this image)"
+		exit 0
+	fi
+
+	"${INIT}" disable
+	echo "disable rc=$?"
+
+	if ls /etc/rc.d/*softethervpnserver >/dev/null 2>&1; then
+		echo "FAIL: a boot-time symlink is still present"
+	else
+		echo "autostart: off (no /etc/rc.d link)"
+	fi
+
+	if pgrep -x vpnserver >/dev/null 2>&1; then
+		# Match by process name, not argv: 'pgrep -f vpnserver' also matches any
+		# shell whose command line merely mentions the service.
+		echo "running: yes (pid $(pgrep -x vpnserver | tr '\n' ' ')) - left untouched"
+	else
+		echo "running: no"
+	fi
+	echo "to start it:  /etc/init.d/softethervpnserver start"
+	echo "             or VPN -> SoftEther VPN Service in the web UI"
+	echo "to autostart: /etc/init.d/softethervpnserver enable"
+} > "${LOG}" 2>&1
+
+exit 0
