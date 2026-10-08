@@ -72,9 +72,16 @@ function runAction(args, label) {
 				res.stderr ? E('br') : null,
 				res.stderr ? String(res.stderr).trim() : null
 			]), 'error');
+
+			return;
 		}
 
-		L.refresh();
+		/*
+		 * This LuCI build has no L.refresh(); reloading is what the working
+		 * upstream apps here do (luci-app-argon-config uses location.reload()
+		 * after every action).
+		 */
+		location.reload();
 	}).catch(function(e) {
 		ui.addNotification(null, E('p', '操作失败：' + (e && e.message ? e.message : e)), 'error');
 	});
