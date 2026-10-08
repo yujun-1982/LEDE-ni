@@ -29,7 +29,7 @@ openwrt/bin/targets/x86/64/openwrt-x86-64-generic-squashfs-combined.img.gz
 | 引导 | GRUB，串口控制台开启 @115200，`quiet loglevel=0`，timeout `0`，无 EFI |
 | 镜像格式 | 仅 gzip 压缩的 `.img.gz`（不出 ext4 / EFI / VDI / QCOW2 / VMDK） |
 | LAN | `br-lan` 桥接（成员口 `eth0`）静态 `10.10.10.2/24` |
-| root 密码 | 空 |
+| root 密码 | `111111`（见"安全提醒"） |
 | 主题 | Argon + Argon 设置页（`files/etc/config/luci` 指定 mediaurlbase） |
 | 语言 | 简体中文（`luci.main.lang='zh_cn'` + 7 个 `luci-i18n-*-zh-cn`） |
 | 分流 | 官方 nftables flow offloading（`files/etc/config/firewall` 的 lan zone） |
@@ -68,16 +68,23 @@ openwrt/bin/targets/x86/64/openwrt-x86-64-generic-squashfs-combined.img.gz
 
 ## 安全提醒
 
-订阅链接、密码、API token 一律**不要提交进本仓库**。放 GitHub Secrets，构建时注入。
+订阅链接、API token 一律**不要提交进本仓库**，放 GitHub Secrets 构建时注入。
+
+例外（用户明确要求）：root 密码 `111111` 以 SHA-512 crypt 哈希的形式写在
+`files/etc/uci-defaults/98-set-root-password` 里。本仓库是 **public**，`111111` 属于弱口令，
+哈希可被离线爆破，所以这套固件**不要直接暴露到公网**；要改密码就重新生成哈希替换该文件里的 `HASH=`。
 
 ## 已知未包含的东西
 
-25.12 的 LuCI 换成了 ucode/JS 架构，以下几项在裸装上会让 Web 界面出问题。当前仓库**按需求保持干净、未包含它们**，出问题时再按需加：
+25.12 的 LuCI 换成了 ucode/JS 架构。之前在 25.12 裸装上出过问题的几项，现在的状态：
 
-1. `CONFIG_PACKAGE_uhttpd-mod-ucode=y` — 缺了没有 `uhttpd_ucode.so`，uhttpd 会静默忽略 ucode handler。
-2. `files/etc/config/uhttpd` 覆盖 — 去掉 `luci-compat` 注入的 `lua_prefix`，改用 `ucode_prefix`。
-3. `luci.main.resourcebase '/luci-static/resources'` — 不设则 `luci.js` 会被解析到站点根目录而 404。
-4. `rpcd` 的 `timeout` 默认 30 秒，慢页面加载期间会话会过期。
+1. ~~`CONFIG_PACKAGE_uhttpd-mod-ucode=y`~~、~~`files/etc/config/uhttpd` 覆盖（`lua_prefix` → `ucode_prefix`）~~
+   —— 刷机实测**不需要**：镜像里只有 `uhttpd_ubus.so`，但 ucode dispatcher 正常工作
+   （响应头 `x-luci-login-required` 由它添加，`/cgi-bin/luci/admin/translations/zh-cn` 返回 200）。
+2. `luci.main.resourcebase '/luci-static/resources'` —— **这个才是真凶，已加入 `files/etc/config/luci`**。
+   不设时 index 里发出的是 `<script src="/luci.js">` → 404（文件实际在
+   `/luci-static/resources/luci.js`），于是所有 JS 视图永远停在"加载视图中…"。
+3. `rpcd` 的 `timeout` 默认 30 秒，慢页面加载期间会话会过期 —— 仍未包含。
 
 简体中文语言包和 Argon 设置页**已经包含**，不在此列。
 
