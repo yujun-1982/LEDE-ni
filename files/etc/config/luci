@@ -1,7 +1,0 @@
-config core 'main'
-	option lang 'zh_cn'
-	option mediaurlbase '/luci-static/argon'
-	# Without this LuCI emits <script src="/luci.js">, which 404s: the file
-	# actually lives at /luci-static/resources/luci.js. Every JS view then
-	# hangs forever on "loading view".
-	option resourcebase '/luci-static/resources'

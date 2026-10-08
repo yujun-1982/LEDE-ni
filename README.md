@@ -81,9 +81,22 @@ openwrt/bin/targets/x86/64/openwrt-x86-64-generic-squashfs-combined.img.gz
 1. ~~`CONFIG_PACKAGE_uhttpd-mod-ucode=y`~~、~~`files/etc/config/uhttpd` 覆盖（`lua_prefix` → `ucode_prefix`）~~
    —— 刷机实测**不需要**：镜像里只有 `uhttpd_ubus.so`，但 ucode dispatcher 正常工作
    （响应头 `x-luci-login-required` 由它添加，`/cgi-bin/luci/admin/translations/zh-cn` 返回 200）。
-2. `luci.main.resourcebase '/luci-static/resources'` —— **这个才是真凶，已加入 `files/etc/config/luci`**。
-   不设时 index 里发出的是 `<script src="/luci.js">` → 404（文件实际在
-   `/luci-static/resources/luci.js`），于是所有 JS 视图永远停在"加载视图中…"。
+2. `luci.main.resourcebase '/luci-static/resources'` —— **这个才是真凶**。不设时 index 里发出的
+   是 `<script src="/luci.js">` → 404（文件实际在 `/luci-static/resources/luci.js`），
+   于是所有 JS 视图永远停在"加载视图中…"。
+   注意它本来**就是 luci-base 打包默认值里的第 4 行**——是我们自己把它弄丢的：
+   原先仓库里有 `files/etc/config/luci` 这个 overlay 文件，而 **overlay 是整文件替换、不是合并**，
+   于是连带删掉了 `ubuspath`、`config internal 'sauth'`（`sessionpath`/`sessiontime`）、
+   `ccache`、`apply`（`rollback`/`holdoff`/`timeout`/`display`）等默认项。
+   现在改成 `files/etc/uci-defaults/96-set-luci-ui`，只用 `uci set` 改 `lang` 和 `mediaurlbase`
+   两项，其余保留上游默认，脚本会把 `resourcebase`/`ubuspath`/`sauth` 的现值打印到
+   `/tmp/uci-defaults-96-set-luci-ui.log` 以便核对。
+
+   **通用教训**：`files/etc/config/<x>` 会完整替换 `<x>` 包自带的那份。要改配置优先用 uci-defaults
+   里的 `uci set`；确实需要整文件覆盖时，先把打包默认抄全再改。
+   （`files/etc/config/network` 是有意整份覆盖的，实测安全：`config_generate` 的守卫是
+   `[ -s network -a -s system ] && exit 0`，而 `system` 首次开机才生成，所以它照常跑、
+   只是跳过 network 生成。）
 3. `rpcd` 的 `timeout` 默认 30 秒，慢页面加载期间会话会过期 —— 仍未包含。
 
 简体中文语言包和 Argon 设置页**已经包含**，不在此列。
