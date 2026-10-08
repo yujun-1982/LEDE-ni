@@ -81,6 +81,8 @@ jobs:
           for s in CONFIG_PACKAGE_luci-theme-argon CONFIG_PACKAGE_luci-app-argon-config \
                    CONFIG_PACKAGE_luci-app-passwall CONFIG_PACKAGE_luci-app-softether-service \
                    CONFIG_PACKAGE_luci-app-timecontrol CONFIG_LUCI_LANG_zh_Hans \
+                   CONFIG_PACKAGE_kmod-wireguard CONFIG_PACKAGE_wireguard-tools \
+                   CONFIG_PACKAGE_luci-proto-wireguard \
                    CONFIG_PACKAGE_ruby CONFIG_PACKAGE_dnsmasq-full; do
             grep "^${s}=" .config || echo "MISSING: ${s}"
           done
@@ -100,6 +102,8 @@ jobs:
                    CONFIG_PACKAGE_luci-app-argon-config=y CONFIG_PACKAGE_luci-app-passwall=y \
                    CONFIG_PACKAGE_luci-app-softether-service=y CONFIG_PACKAGE_luci-app-timecontrol=y \
                    CONFIG_PACKAGE_softethervpn5-server=y CONFIG_PACKAGE_kmod-nft-offload=y \
+                   CONFIG_PACKAGE_kmod-wireguard=y CONFIG_PACKAGE_wireguard-tools=y \
+                   CONFIG_PACKAGE_luci-proto-wireguard=y \
                    CONFIG_PACKAGE_luci-i18n-base-zh-cn=y \
                    CONFIG_PACKAGE_luci-i18n-argon-config-zh-cn=y; do
             grep -qxF "$s" .config || { echo "MISSING: $s"; status=1; }

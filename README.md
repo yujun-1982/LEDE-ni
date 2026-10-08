@@ -30,8 +30,8 @@ openwrt/bin/targets/x86/64/openwrt-x86-64-generic-squashfs-combined.img.gz
 | 镜像格式 | 仅 gzip 压缩的 `.img.gz`（不出 ext4 / EFI / VDI / QCOW2 / VMDK） |
 | LAN | `br-lan` 桥接（成员口 `eth0`）静态 `10.10.10.2/24` |
 | root 密码 | `111111`（见"安全提醒"） |
-| 主题 | Argon + Argon 设置页（`files/etc/config/luci` 指定 mediaurlbase） |
-| 语言 | 简体中文（`luci.main.lang='zh_cn'` + 7 个 `luci-i18n-*-zh-cn`） |
+| 主题 | Argon + Argon 设置页（`files/etc/uci-defaults/96-set-luci-ui` 设 mediaurlbase） |
+| 语言 | 简体中文（`luci.main.lang='zh_cn'`，翻译包由 `CONFIG_LUCI_LANG_zh_Hans` 点亮，见下） |
 | 分流 | 官方 nftables flow offloading（`files/etc/config/firewall` 的 lan zone） |
 
 ## 插件
@@ -43,12 +43,20 @@ openwrt/bin/targets/x86/64/openwrt-x86-64-generic-squashfs-combined.img.gz
 | `luci-app-passwall` | `xiaorouji/luci-app-passwall` + `xiaorouji/openwrt-passwall-packages` | 需要两个 feed |
 | `luci-app-softether-service` | **本仓库自带**（`package/`，以 `src-link custom` 注册为 feed） | 菜单 **VPN → SoftEther VPN Service**：显示运行状态/PID/开机自启，提供启动、停止、重启、自启开关 |
 | `softethervpn5-server` | 官方 `packages` feed | **服务端**。没有任何 LuCI 应用会拉它，必须显式勾选。开机自启由 `files/etc/uci-defaults/97-enable-softethervpn-server` 处理；注意 init 脚本名是 `softethervpnserver`，**没有连字符** |
+| WireGuard | 官方 `packages` feed | **只装组件，不预配置**：`kmod-wireguard` + `wireguard-tools` + `luci-proto-wireguard`。本仓库的 LuCI Master 版本里**没有** `luci-app-wireguard`，入口就是 `luci-proto-wireguard` 提供的"WireGuard 隧道"接口类型（网络 → 接口）。不预置接口/密钥/防火墙规则，理由见下 |
 
 上游的 `luci-app-softether` **已刻意移除**：它唯一的页面列的是 SoftEther **客户端**的虚拟网卡和账号
 （helper 里全是 `vpncmd localhost /client ...`），对服务端部署没有意义；而且在 LuCI Master 下它用
 `fs.exec_direct()` 请求 `/cgi-bin/cgi-exec`，被 rpcd 以 **403（Access to command denied by ACL）** 拒绝，
 页面就永远停在"正在加载账号信息"。我们自己的页面改用 ubus 的 `fs.exec()` 与 `service list`，
 并且每个分支都带 `.catch()`，不会再出现无限加载。
+
+WireGuard 故意**不预置任何接口、密钥或防火墙规则**：本仓库是 public 的，而 WireGuard 的私钥一旦泄漏
+就等于隧道失守， site-specific 的密钥不该进版本库。刷完机在 web UI 里新建，或者命令行生成一对密钥：
+
+```sh
+wg genkey | tee privatekey | wg pubkey > publickey
+```
 | `luci-app-timecontrol` | `sirpdboy/luci-app-timecontrol` | 上网时间控制。**需要本仓库补一个菜单父节点**，见下 |
 
 ### 为什么要有 `files/usr/share/luci/menu.d/99-custom-menu-parents.json`

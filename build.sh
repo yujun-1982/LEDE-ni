@@ -143,6 +143,9 @@ CONFIG_PACKAGE_luci-app-softether-service=y
 CONFIG_PACKAGE_luci-app-timecontrol=y
 CONFIG_PACKAGE_softethervpn5-server=y
 CONFIG_PACKAGE_kmod-nft-offload=y
+CONFIG_PACKAGE_kmod-wireguard=y
+CONFIG_PACKAGE_wireguard-tools=y
+CONFIG_PACKAGE_luci-proto-wireguard=y
 CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
 CONFIG_PACKAGE_luci-i18n-argon-config-zh-cn=y
 "
