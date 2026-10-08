@@ -49,7 +49,19 @@ openwrt/bin/targets/x86/64/openwrt-x86-64-generic-squashfs-combined.img.gz
 `fs.exec_direct()` 请求 `/cgi-bin/cgi-exec`，被 rpcd 以 **403（Access to command denied by ACL）** 拒绝，
 页面就永远停在"正在加载账号信息"。我们自己的页面改用 ubus 的 `fs.exec()` 与 `service list`，
 并且每个分支都带 `.catch()`，不会再出现无限加载。
-| `luci-app-timecontrol` | `sirpdboy/luci-app-timecontrol` | 上网时间控制 |
+| `luci-app-timecontrol` | `sirpdboy/luci-app-timecontrol` | 上网时间控制。**需要本仓库补一个菜单父节点**，见下 |
+
+### 为什么要有 `files/usr/share/luci/menu.d/99-custom-menu-parents.json`
+
+`luci-app-timecontrol` 的 menu.d 只声明了子节点 `admin/control/timecontrol`，**从不声明父节点
+`admin/control`**。旧的 Lua dispatcher 会自动补出中间层级，LuCI Master 的 ucode dispatcher 不会，
+于是"管控"这一项在菜单里完全不出现（页面本身是能直达的，`/cgi-bin/luci/admin/control/timecontrol/basic`
+正常渲染）。本仓库补一个只声明父节点的 menu.d 文件把它接回来。
+
+排查时注意一个坑：LuCI 把整棵菜单树缓存在**客户端会话数据**里（`ui.menu.load()` →
+`session.getLocalData('menu')`），服务端已经修好了浏览器也可能看不见。判断依据是直接请求
+`/cgi-bin/luci/admin/menu` 这个 JSON 端点看服务端返回；要让界面刷新就
+`ui.menu.flushCache()` 后重载，或者重新登录一次。
 | OpenClash | `files/root/precompiled-pkgs/*.apk` | 含闭源 mihomo 核心 |
 | NinjaDesktop Lite | `files/root/precompiled-pkgs/*.apk` | 桌面环境 |
 
