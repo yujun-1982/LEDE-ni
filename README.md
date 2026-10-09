@@ -141,7 +141,10 @@ wg genkey | tee privatekey | wg pubkey > publickey
    - init 脚本 `stop_service()` 里先 `Flush` 再让 procd 杀进程，所以 `stop`/`restart`/正常 `reboot`
      立刻落盘；
    - 页面有"保存配置到磁盘"按钮，命令行为 `vpncmd localhost:5555 /server /CMD Flush`。
-   合计效果：**硬重启最多丢 5 分钟**，正常重启/关机不丢。
+   合计效果：**硬重启最多丢 5 分钟**，正常重启/关机不丢。已实测确认：08:03:51 `HubCreate zztimer`
+   后磁盘文件仍是旧的 20287 字节、里面查不到这个名字，之后**我没有执行任何 `Flush`**，到 08:09
+   文件自己涨到 26515 字节并含该 HUB；紧接一次 `reboot`（同样没 Flush）起来后 `HubList`
+   仍是 `DEFAULT` / `zzspan` / `zztimer`。
 2. **设了服务端管理密码之后，Flush 需要密码。** init 脚本和 helper 都会读
    `/etc/softethervpn-server/management.password`（首行为密码，权限请保持 600，属 root，**绝不要提交进仓库**）：
    `printf '%s\n' '你的密码' > /etc/softethervpn-server/management.password && chmod 600 /etc/softethervpn-server/management.password`。
