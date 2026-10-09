@@ -57,6 +57,24 @@ LOG='/tmp/uci-defaults-97-softethervpn.log'
 		echo "sysupgrade backup: added /etc/softethervpn-server"
 	fi
 	echo "sysupgrade backup: $(grep -c '/etc/softethervpn-server' /etc/sysupgrade.conf 2>/dev/null || echo 0) entry"
+
+	# SoftEther ships AutoSaveConfigSpan = 86400 s, so configuration changes stay
+	# in RAM for up to a day unless something flushes them - a hard reset (for
+	# example Proxmox' Restart) then discards them. The round trip needs a running
+	# server, so start it briefly and leave it stopped again; autostart is already
+	# disabled above, so this does not change the default.
+	if [ -x /usr/libexec/softethervpn-set-autosave ]; then
+		"${INIT}" start
+		sleep 5
+		/usr/libexec/softethervpn-set-autosave 300
+		echo "autosave clamp rc=$?"
+		"${INIT}" stop
+		sleep 2
+		echo "config AutoSaveConfigSpan: $(grep -a AutoSaveConfigSpan /etc/softethervpn-server/vpn_server.config 2>/dev/null | tr -d '\t\r')"
+	else
+		echo "autosave clamp: helper not present, server keeps the 86400 s default"
+	fi
+
 	echo "to start it:  /etc/init.d/softethervpnserver start"
 	echo "             or VPN -> SoftEther VPN Service in the web UI"
 	echo "to autostart: /etc/init.d/softethervpnserver enable"

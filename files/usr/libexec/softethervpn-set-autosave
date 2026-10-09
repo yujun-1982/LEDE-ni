@@ -1,0 +1,68 @@
+#!/bin/sh
+#
+# softethervpn-set-autosave - clamp vpnserver's AutoSaveConfigSpan.
+#
+# SoftEther ships with AutoSaveConfigSpan = 86400 s: hub, user and listener
+# changes live only in RAM and are written out on the management command Flush
+# or on a graceful shutdown. A hard reset (Proxmox' Restart, or a power cut)
+# therefore discards up to a day of configuration - which is exactly how the
+# reported "config gone after reboot" happened.
+#
+# vpn_server.config carries hash fields, so editing it in place is not safe.
+# Go through the server's own round trip instead: ConfigGet dumps the running
+# configuration, we change one number, ConfigSet pushes it back (the server
+# validates it and rewrites its own file), then Flush writes it out.
+#
+# The server clamps the value to its own minimum; measured 60 -> 300, so 300 s
+# is the practical floor.
+#
+# Usage: softethervpn-set-autosave [seconds]   (default 300)
+#
+
+BIN=/usr/bin/vpncmd
+STORE=/etc/softethervpn-server
+PWFILE="${STORE}/management.password"
+TARGET=${1:-300}
+
+[ -x "${BIN}" ] || { echo "vpncmd not present at ${BIN}" >&2; exit 1; }
+
+# Once a server management password is set, every management command needs it.
+# Keep it in a root-only file on the device; never commit it.
+AUTH=""
+if [ -s "${PWFILE}" ]; then
+	AUTH="/PASSWORD:$(head -n 1 "${PWFILE}")"
+fi
+
+tmp=$(mktemp /tmp/softethervpn-autosave.XXXXXX) || exit 1
+trap 'rm -f "${tmp}"' EXIT
+
+# shellcheck disable=SC2086
+"${BIN}" localhost:5555 /server ${AUTH} /OUT:"${tmp}" /CMD ConfigGet </dev/null >/dev/null 2>&1 || {
+	echo "ConfigGet failed - is the server running and the password correct?" >&2
+	exit 1
+}
+
+grep -q 'AutoSaveConfigSpan' "${tmp}" || {
+	echo "no AutoSaveConfigSpan in the dumped configuration" >&2
+	exit 1
+}
+
+sed -i "s/AutoSaveConfigSpan [0-9][0-9]*/AutoSaveConfigSpan ${TARGET}/" "${tmp}"
+
+# ConfigSet reads the path from its prompt, not from a /IN parameter.
+# shellcheck disable=SC2086
+printf '%s\n' "${tmp}" | timeout 40 "${BIN}" localhost:5555 /server ${AUTH} /CMD ConfigSet >/dev/null 2>&1 || {
+	echo "ConfigSet failed" >&2
+	exit 1
+}
+
+sleep 5
+# shellcheck disable=SC2086
+timeout 20 "${BIN}" localhost:5555 /server ${AUTH} /CMD Flush </dev/null >/dev/null 2>&1
+
+# Report what the server actually kept - it clamps the value to its own minimum.
+rm -f "${tmp}"
+# shellcheck disable=SC2086
+"${BIN}" localhost:5555 /server ${AUTH} /OUT:"${tmp}" /CMD ConfigGet </dev/null >/dev/null 2>&1
+echo "asked for ${TARGET}s, server has: $(grep -a 'AutoSaveConfigSpan' "${tmp}" | tr -d '\t\r')"
+exit 0

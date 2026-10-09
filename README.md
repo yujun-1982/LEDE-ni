@@ -33,7 +33,7 @@ openwrt/bin/targets/x86/64/openwrt-x86-64-generic-squashfs-combined.img.gz
 | 主题 | Argon + Argon 设置页（`files/etc/uci-defaults/96-set-luci-ui` 设 mediaurlbase） |
 | 语言 | 简体中文（`luci.main.lang='zh_cn'`，翻译包由 `CONFIG_LUCI_LANG_zh_Hans` 点亮，见下） |
 | 分流 | 官方 nftables flow offloading（`files/etc/config/firewall` 的 lan zone） |
-| SoftEther | 服务端二进制已装，**默认不自启**（首次开机脚本显式 disable）；客户端不装；配置落在 `/etc/softethervpn-server`（重启不丢） |
+| SoftEther | 服务端二进制已装，**默认不自启**（首次开机脚本显式 disable）；客户端不装；配置落在 `/etc/softethervpn-server`，并把自动保存间隔从 86400 秒压到 300 秒 |
 | Web 管理 | HTTP 80；443 已配置但**实际不监听**——镜像内没有证书生成器（`px5g`/`openssl` CLI 都没有），详见"SoftEther 服务端"一节 |
 
 ## 插件
@@ -125,19 +125,34 @@ wg genkey | tee privatekey | wg pubkey > publickey
 - `97-softethervpn-server-no-autostart` 顺手把 `/etc/softethervpn-server` 加进
   `/etc/sysupgrade.conf`，带配置升级时配置一起保留。
 
-注意三点：
+注意四点：
 
-1. **改动要 Flush 才写盘。** 真机验证过：`HubCreate`/`UserCreate` 之后 `vpn_server.config` 的 md5、大小、mtime
-   全都不变，运行中的服务却能看到新 HUB —— SoftEther 5.x 把改动留在内存，只在收到管理命令 `Flush`
-   或**正常停止服务**时才写文件。本仓库的 init 脚本已经在 `stop_service()` 里先 `Flush` 再让 procd 杀进程，
-   所以 `stop`、`restart`、正常 `reboot`（走 rc.d 的 K 链接）都会落盘；**直接断电/`reboot -f` 则会丢掉没
-   Flush 的改动**。页面上有"保存配置到磁盘"按钮，命令行为
-   `vpncmd localhost:5555 /server /CMD Flush`。
-2. 在服务端上直接 `apk add --upgrade softethervpn5-server` 会用上游脚本覆盖我们这份，
+1. **改动只在三种时机写盘，其中"自动保存"默认是 24 小时。** 真机验证过：`HubCreate` 之后
+   `vpn_server.config` 的 md5/大小/mtime 全不变，而运行中的服务已能看到新 HUB —— SoftEther 5.x
+   把改动留在内存，写盘时机只有三个：收到管理命令 `Flush`、进程**优雅停止**、以及配置项
+   `AutoSaveConfigSpan` 到期（出厂默认 **86400 秒 = 24 小时**）。所以**硬重启（Proxmox 的"重启"就是
+   硬 reset，不走 ACPI 关机）或断电会直接丢掉这一天之内的改动** —— 这就是"刷了新固件、重启几次配置又没了"
+   的真实原因。本仓库的处理：
+   - `files/usr/libexec/softethervpn-set-autosave` 走服务端自己的 `ConfigGet` → 改一个数 →
+     `ConfigSet` → `Flush` 通道（`vpn_server.config` 里带哈希字段，**不能手改文件**），把间隔压到
+     服务端允许的下限 **300 秒**（实测填 60 会被抬回 300）；
+   - `97-softethervpn-server-no-autostart` 在首次开机时短暂启动服务端完成上面这轮压缩，然后停掉
+     （不改变"默认不自启"）；带配置升级时 uci-defaults 会再跑一次，老设备的 86400 也会被改过来；
+   - init 脚本 `stop_service()` 里先 `Flush` 再让 procd 杀进程，所以 `stop`/`restart`/正常 `reboot`
+     立刻落盘；
+   - 页面有"保存配置到磁盘"按钮，命令行为 `vpncmd localhost:5555 /server /CMD Flush`。
+   合计效果：**硬重启最多丢 5 分钟**，正常重启/关机不丢。
+2. **设了服务端管理密码之后，Flush 需要密码。** init 脚本和 helper 都会读
+   `/etc/softethervpn-server/management.password`（首行为密码，权限请保持 600，属 root，**绝不要提交进仓库**）：
+   `printf '%s\n' '你的密码' > /etc/softethervpn-server/management.password && chmod 600 /etc/softethervpn-server/management.password`。
+   没这个文件时它们照旧静默跳过（未设密码的服务端不需要）。注意 300 秒的自动保存是服务端内部行为，
+   不需要任何凭据，所以即使忘了写这个文件，最坏也只是丢 5 分钟。
+3. 在服务端上直接 `apk add --upgrade softethervpn5-server` 会用上游脚本覆盖我们这份，
    升级后需要重新刷本仓库的镜像（或手工恢复）；另外 SoftEther 若开启日志，日志也落在
    `/etc/softethervpn-server`，长期大量写日志会消耗闪存，建议只在排障时开。
-3. `vpncmd` 的正确形式是 `vpncmd localhost:5555 /server /CMD <命令>`（参数是 `/SERVER`，不是 `/device`）；
-   `HubCreate` 会交互式询问 HUB 密码，脚本化时要么喂换行、要么在交互界面里做。
+4. `vpncmd` 的正确形式是 `vpncmd localhost:5555 /server /CMD <命令>`；取/灌整份配置用
+   `/OUT:文件 /CMD ConfigGet` 和 `printf '文件路径\n' | vpncmd … /CMD ConfigSet`（`ConfigSet` 的
+   路径是交互输入的，`/IN:` 无效）；`HubCreate` 会交互式询问 HUB 密码，脚本化时喂换行走默认值。
 
 ## 安全提醒
 

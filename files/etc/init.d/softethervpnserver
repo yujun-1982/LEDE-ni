@@ -15,14 +15,26 @@ STORE=/etc/softethervpn-server
 STOCK=/usr/libexec/softethervpn
 
 # SoftEther keeps hub/user/listener changes in memory. vpn_server.config is only
-# rewritten when it is told to (the management command 'Flush') or when the
-# daemon shuts down gracefully, so a configuration that was just created is
-# still lost if power is cut. Flushing on stop makes every stop - and therefore
-# every restart and every reboot, which runs the rc.d kill link - deterministic.
+# rewritten when it is told to (the management command 'Flush'), when the daemon
+# shuts down gracefully, or after AutoSaveConfigSpan seconds - which the shipped
+# default sets to 86400 (24 h). /usr/libexec/softethervpn-set-autosave lowers it
+# to the server's floor of 300 s. Flushing on stop makes every stop, and
+# therefore every restart and every reboot (rc.d kill link), deterministic; a
+# hard reset such as Proxmox' Restart now costs at most 5 minutes of changes.
+#
+# Once a server management password is set, Flush needs it. Keep it in
+# /etc/softethervpn-server/management.password (root-only, never committed).
 flush_conf() {
 	[ -x /usr/bin/vpncmd ] || return 0
 	pgrep -x vpnserver >/dev/null 2>&1 || return 0
-	timeout 10 /usr/bin/vpncmd localhost:5555 /server /CMD Flush </dev/null >/dev/null 2>&1
+
+	AUTH=""
+	if [ -s "${STORE}/management.password" ]; then
+		AUTH="/PASSWORD:$(head -n 1 "${STORE}/management.password")"
+	fi
+
+	# shellcheck disable=SC2086
+	timeout 10 /usr/bin/vpncmd localhost:5555 /server ${AUTH} /CMD Flush </dev/null >/dev/null 2>&1
 }
 
 stop_service() {
