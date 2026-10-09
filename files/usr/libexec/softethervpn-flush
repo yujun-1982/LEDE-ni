@@ -1,0 +1,38 @@
+#!/bin/sh
+#
+# softethervpn-flush - write vpnserver's in-memory configuration to disk.
+#
+# Single place that knows how to authenticate a Flush, so the init script and
+# the web page cannot drift apart. If a server management password was set from
+# the GUI and /etc/softethervpn-server/management.password does not exist, this
+# reports the denial instead of failing silently - a silent denial is how
+# "everything disappeared after reboot" happens.
+#
+# Register the password once, on the device only:
+#   umask 077; printf '%s\n' '<the password>' > /etc/softethervpn-server/management.password
+
+BIN=/usr/bin/vpncmd
+STORE=/etc/softethervpn-server
+PWFILE="${STORE}/management.password"
+
+[ -x "${BIN}" ] || { echo "vpncmd is not installed" >&2; exit 1; }
+pgrep -x vpnserver >/dev/null 2>&1 || { echo "vpnserver is not running" >&2; exit 1; }
+
+AUTH=""
+if [ -s "${PWFILE}" ]; then
+	AUTH="/PASSWORD:$(head -n 1 "${PWFILE}")"
+fi
+
+# shellcheck disable=SC2086
+out=$(timeout 15 "${BIN}" localhost:5555 /server ${AUTH} /CMD Flush </dev/null 2>&1)
+
+case "${out}" in
+*"Saving completed"* | *"command completed successfully"*)
+	echo "${out}" | grep -ao 'Saving completed[^.]*\.' | head -1
+	exit 0
+	;;
+esac
+
+echo "Flush did not happen:" >&2
+echo "${out}" | grep -aiE 'denied|password|error|welcome' | head -2 >&2
+exit 1

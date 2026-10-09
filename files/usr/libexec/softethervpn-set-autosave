@@ -64,5 +64,12 @@ timeout 20 "${BIN}" localhost:5555 /server ${AUTH} /CMD Flush </dev/null >/dev/n
 rm -f "${tmp}"
 # shellcheck disable=SC2086
 "${BIN}" localhost:5555 /server ${AUTH} /OUT:"${tmp}" /CMD ConfigGet </dev/null >/dev/null 2>&1
-echo "asked for ${TARGET}s, server has: $(grep -a 'AutoSaveConfigSpan' "${tmp}" | tr -d '\t\r')"
-exit 0
+have=$(grep -a 'AutoSaveConfigSpan' "${tmp}" | tr -d '\t\r' | head -1)
+echo "asked for ${TARGET}s, server has: ${have}"
+
+# Callers retry on a non-zero exit, so say plainly whether the value stuck
+# instead of exiting 0 whatever the server answered.
+case "${have}" in
+*"AutoSaveConfigSpan ${TARGET}"*) exit 0 ;;
+esac
+exit 1

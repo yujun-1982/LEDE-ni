@@ -17,7 +17,8 @@
 				"/etc/init.d/softethervpnserver restart": [ "exec" ],
 				"/etc/init.d/softethervpnserver start": [ "exec" ],
 				"/etc/init.d/softethervpnserver stop": [ "exec" ],
-				"/usr/bin/vpncmd localhost:5555 /server /CMD Flush": [ "exec" ]
+				"/usr/libexec/softethervpn-flush": [ "exec" ],
+				"/usr/libexec/softethervpn-set-autosave 300": [ "exec" ]
 			}
 		}
 	}

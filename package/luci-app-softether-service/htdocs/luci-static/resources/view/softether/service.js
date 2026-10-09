@@ -12,7 +12,8 @@
  */
 
 var initd = '/etc/init.d/softethervpnserver';
-var vpncmd = '/usr/bin/vpncmd';
+var flushBin = '/usr/libexec/softethervpn-flush';
+var clampBin = '/usr/libexec/softethervpn-set-autosave';
 var svcName = 'softethervpnserver';
 
 var callServiceList = rpc.declare({
@@ -99,25 +100,40 @@ function button(label, cls, args) {
 /*
  * SoftEther holds hub/user changes in memory until it is told to write them
  * out, so give the operator a way to flush without stopping the service.
+ *
+ * Both actions go through helper scripts under /usr/libexec instead of calling
+ * vpncmd here: once a server management password is set, a bare `Flush` is
+ * refused, and the helpers read /etc/softethervpn-server/management.password.
+ * The password therefore never travels through the browser.
  */
-function runFlush() {
-	ui.addNotification(null, E('p', '正在保存配置'), 'info');
+function runHelper(busyText, okText, bin, args) {
+	ui.addNotification(null, E('p', busyText), 'info');
 
-	return fs.exec(vpncmd, [ 'localhost:5555', '/server', '/CMD', 'Flush' ]).then(function(res) {
+	return fs.exec(bin, args).then(function(res) {
 		if (res.code !== 0) {
 			ui.addNotification(null, E('p', [
-				'保存失败，命令返回状态 ' + res.code,
-				res.stderr ? E('br') : null,
-				res.stderr ? String(res.stderr).trim() : null
+				'操作失败，命令返回状态 ' + res.code,
+				E('br'),
+				String(res.stderr || '').trim() || '（无输出）',
+				E('br'),
+				'若服务端已设置管理密码，请在设备上执行：umask 077; printf \'%s\\n\' \'服务端密码\' > /etc/softethervpn-server/management.password'
 			]), 'error');
 
 			return;
 		}
 
-		ui.addNotification(null, E('p', '配置已写入 /etc/softethervpn-server/vpn_server.config'), 'success');
+		ui.addNotification(null, E('p', okText + (String(res.stdout || '').trim() ? ' — ' + String(res.stdout).trim() : '')), 'success');
 	}).catch(function(e) {
-		ui.addNotification(null, E('p', '保存失败：' + (e && e.message ? e.message : e)), 'error');
+		ui.addNotification(null, E('p', '操作失败：' + (e && e.message ? e.message : e)), 'error');
 	});
+}
+
+function runFlush() {
+	return runHelper('正在保存配置', '配置已写入 /etc/softethervpn-server/vpn_server.config', flushBin, []);
+}
+
+function runClamp() {
+	return runHelper('正在调整自动保存间隔', '自动保存间隔已调整', clampBin, [ '300' ]);
 }
 
 function row(key, value) {
@@ -164,6 +180,11 @@ return view.extend({
 					style: 'margin-right:.4em',
 					click: function() { return runFlush(); }
 				}, '保存配置到磁盘'),
+				E('button', {
+					class: 'btn secondary',
+					style: 'margin-right:.4em',
+					click: function() { return runClamp(); }
+				}, '每 5 分钟自动保存'),
 				st.boot
 					? button('取消开机自启', 'secondary', [ 'disable' ])
 					: button('设为开机自启', 'secondary', [ 'enable' ])
@@ -174,9 +195,13 @@ return view.extend({
 				'（可写 overlay，已加入 sysupgrade 备份清单）。',
 				E('br'),
 				'但 SoftEther 平时把改动留在内存里，只在收到 ', E('code', 'Flush'),
-				' 或正常停止服务时才写盘：新建/修改 HUB、用户、端口后请点 ',
+				'、正常停止服务、或',
+				E('b', '自动保存间隔'),
+				'到期时才写盘。新建/修改 HUB、用户、端口、本地桥接后请点 ',
 				E('b', '保存配置到磁盘'),
-				'（本镜像的 init 脚本已会在 stop 前自动 Flush，正常 reboot 也会落盘；直接断电则未 Flush 的改动会丢）。',
+				'。硬重启（Proxmox 的"重启"、直接断电）不走关机脚本，所以还要保证自动保存间隔是 5 分钟而不是出厂默认的 24 小时 —— 点 ',
+				E('b', '每 5 分钟自动保存'),
+				'即可。',
 				E('br'),
 				'默认监听端口：443、992、1194、5555。',
 				E('br'),
@@ -194,7 +219,12 @@ return view.extend({
 				E('code', 'UserCreate'),
 				'，最后 ',
 				E('code', 'Flush'),
-				'。'
+				'。',
+				E('br'),
+				E('b', '注意'),
+				'：一旦设置了服务端管理密码，上面两个按钮以及 stop 时的自动 Flush 都需要它，请在设备上把密码写进 ',
+				E('code', '/etc/softethervpn-server/management.password'),
+				'（权限 600，只存在设备上，不要提交到仓库），否则改动只靠 5 分钟自动保存落盘。'
 			]))
 		]);
 	},

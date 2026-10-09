@@ -135,21 +135,33 @@ wg genkey | tee privatekey | wg pubkey > publickey
    的真实原因。本仓库的处理：
    - `files/usr/libexec/softethervpn-set-autosave` 走服务端自己的 `ConfigGet` → 改一个数 →
      `ConfigSet` → `Flush` 通道（`vpn_server.config` 里带哈希字段，**不能手改文件**），把间隔压到
-     服务端允许的下限 **300 秒**（实测填 60 会被抬回 300）；
-   - `97-softethervpn-server-no-autostart` 在首次开机时短暂启动服务端完成上面这轮压缩，然后停掉
-     （不改变"默认不自启"）；带配置升级时 uci-defaults 会再跑一次，老设备的 86400 也会被改过来；
+     服务端允许的下限 **300 秒**（实测填 60 会被抬回 300）；它会检查服务端最终留下的值，
+     不对就返回非 0，好让调用方重试；
+   - `97-softethervpn-server-no-autostart` 在首次开机时短暂启动服务端做这轮压缩（失败会重试到 4 次），
+     然后停掉（不改变"默认不自启"）；带配置升级时 uci-defaults 会再跑一次；
+   - **每次 `start` 还会自愈一次**：init 脚本发现磁盘上的配置里间隔不是 300（例如从 VPN Server
+     Manager 里"载入配置文件"、或从旧设备恢复了备份，都会把 86400 带回来），就在后台等服务端起来后
+     重新压缩，最多试 12 次；
    - init 脚本 `stop_service()` 里先 `Flush` 再让 procd 杀进程，所以 `stop`/`restart`/正常 `reboot`
-     立刻落盘；
-   - 页面有"保存配置到磁盘"按钮，命令行为 `vpncmd localhost:5555 /server /CMD Flush`。
+     立刻落盘；`Flush` 统一走 `files/usr/libexec/softethervpn-flush`，失败会写系统日志（不再静默）；
+   - 页面上有"保存配置到磁盘"和"每 5 分钟自动保存"两个按钮，分别调用上面两个 helper。
    合计效果：**硬重启最多丢 5 分钟**，正常重启/关机不丢。已实测确认：08:03:51 `HubCreate zztimer`
    后磁盘文件仍是旧的 20287 字节、里面查不到这个名字，之后**我没有执行任何 `Flush`**，到 08:09
    文件自己涨到 26515 字节并含该 HUB；紧接一次 `reboot`（同样没 Flush）起来后 `HubList`
    仍是 `DEFAULT` / `zzspan` / `zztimer`。
-2. **设了服务端管理密码之后，Flush 需要密码。** init 脚本和 helper 都会读
-   `/etc/softethervpn-server/management.password`（首行为密码，权限请保持 600，属 root，**绝不要提交进仓库**）：
-   `printf '%s\n' '你的密码' > /etc/softethervpn-server/management.password && chmod 600 /etc/softethervpn-server/management.password`。
-   没这个文件时它们照旧静默跳过（未设密码的服务端不需要）。注意 300 秒的自动保存是服务端内部行为，
-   不需要任何凭据，所以即使忘了写这个文件，最坏也只是丢 5 分钟。
+2. **设了服务端管理密码之后，一定要把密码登记到设备上，否则上面两条写盘通道全部失效。** 真机踩过的坑：
+   用图形界面 `ServerPasswordSet` 设了密码后，`vpncmd` 不带密码一律 "Access has been denied"，于是
+   stop 时的 `Flush` 被拒、首次开机的自动保存压缩也没生效（磁盘上仍是 `AutoSaveConfigSpan 86400`），
+   **结果就是没有任何东西会写盘，HUB、用户、本地桥接（tap）全在重启后消失**。做法：
+
+   ```sh
+   umask 077
+   printf '%s\n' '你的服务端密码' > /etc/softethervpn-server/management.password
+   ```
+
+   init 脚本、两个 helper 和页面按钮都会读这个文件（首行密码，权限 600，只留在设备上，**绝不要提交进仓库**；
+   密码也不会经过浏览器）。没这个文件时它们照旧跳过。注意 300 秒的自动保存是服务端内部行为、不需要凭据，
+   所以只要间隔确实是 300，忘了登记密码最坏也只丢 5 分钟。
 3. 在服务端上直接 `apk add --upgrade softethervpn5-server` 会用上游脚本覆盖我们这份，
    升级后需要重新刷本仓库的镜像（或手工恢复）；另外 SoftEther 若开启日志，日志也落在
    `/etc/softethervpn-server`，长期大量写日志会消耗闪存，建议只在排障时开。

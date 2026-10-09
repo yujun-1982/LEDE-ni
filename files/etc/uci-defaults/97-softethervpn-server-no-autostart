@@ -5,7 +5,8 @@
 # softethervpn5-server installs an init script, and installing the package
 # leaves a boot-time symlink /etc/rc.d/S91softethervpnserver in the image, so
 # the server would autostart. This script removes that autostart and records
-# the state; it never starts the server and never stops a running one.
+# the state. It starts the server only briefly, to lower its auto-save interval
+# (see the clamp block below), and leaves it stopped.
 #
 # Why disable alone is enough on first boot: uci-defaults are executed from
 # /etc/init.d/boot, whose rc.d link is S10boot, and rcorder walks the list in
@@ -65,9 +66,14 @@ LOG='/tmp/uci-defaults-97-softethervpn.log'
 	# disabled above, so this does not change the default.
 	if [ -x /usr/libexec/softethervpn-set-autosave ]; then
 		"${INIT}" start
-		sleep 5
-		/usr/libexec/softethervpn-set-autosave 300
-		echo "autosave clamp rc=$?"
+		try=1
+		until /usr/libexec/softethervpn-set-autosave 300; do
+			echo "autosave clamp attempt ${try} failed"
+			try=$((try + 1))
+			[ "${try}" -gt 4 ] && break
+			sleep 5
+		done
+		echo "autosave clamp done after ${try} attempt(s)"
 		"${INIT}" stop
 		sleep 2
 		echo "config AutoSaveConfigSpan: $(grep -a AutoSaveConfigSpan /etc/softethervpn-server/vpn_server.config 2>/dev/null | tr -d '\t\r')"

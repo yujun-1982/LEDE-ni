@@ -25,16 +25,11 @@ STOCK=/usr/libexec/softethervpn
 # Once a server management password is set, Flush needs it. Keep it in
 # /etc/softethervpn-server/management.password (root-only, never committed).
 flush_conf() {
-	[ -x /usr/bin/vpncmd ] || return 0
+	[ -x /usr/libexec/softethervpn-flush ] || return 0
 	pgrep -x vpnserver >/dev/null 2>&1 || return 0
-
-	AUTH=""
-	if [ -s "${STORE}/management.password" ]; then
-		AUTH="/PASSWORD:$(head -n 1 "${STORE}/management.password")"
+	if ! /usr/libexec/softethervpn-flush >/dev/null 2>&1; then
+		logger -t softethervpn5 "Flush at stop was refused - if a server management password is set, write it to ${STORE}/management.password (mode 600); until then a hard reset costs up to AutoSaveConfigSpan seconds of changes"
 	fi
-
-	# shellcheck disable=SC2086
-	timeout 10 /usr/bin/vpncmd localhost:5555 /server ${AUTH} /CMD Flush </dev/null >/dev/null 2>&1
 }
 
 stop_service() {
@@ -79,4 +74,22 @@ start_service() {
 	procd_set_param command "${STORE}/vpnserver" start --foreground
 	procd_set_param respawn
 	procd_close_instance
+
+	# Self-healing auto-save: the 24-hour default comes back whenever a
+	# configuration is loaded from a file (VPN Server Manager) or restored from an
+	# older device, and only the running server can change it - ConfigSet needs
+	# authentication, so this has to happen after the daemon is up. Retry until the
+	# server answers with the requested value; harmless when it already says 300,
+	# since the block above then skips the whole thing.
+	if ! grep -q 'AutoSaveConfigSpan 300' "${STORE}/vpn_server.config" 2>/dev/null; then
+		(
+			i=0
+			while [ "${i}" -lt 12 ]; do
+				sleep 5
+				/usr/libexec/softethervpn-set-autosave 300 >/dev/null 2>&1 && break
+				i=$((i + 1))
+			done
+			[ "${i}" -lt 12 ] || logger -t softethervpn5 "could not set AutoSaveConfigSpan to 300 - if a management password is set, write it to ${STORE}/management.password"
+		) &
+	fi
 }
