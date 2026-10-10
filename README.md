@@ -147,6 +147,11 @@ wg genkey | tee privatekey | wg pubkey > publickey
      它只遍历 `/etc/rc.d/K*` 链接；而 `rc.common` 只有在脚本里定义了 `STOP=` 才会为 `enable` 创建 K 链接。
      本仓库的脚本定义了 `STOP=10`，并且 `97-softethervpn-server-no-autostart` 会在关掉自启后**补建**
      `/etc/rc.d/K10softethervpnserver`，所以正常 `reboot`/`halt` 一定先 Flush 再停机；
+   - `stop_service()` 现在**先调用 SoftEther 自己的 `./vpnserver stop`**（在 `/etc/softethervpn-server`
+     目录里执行）再走 `Flush`：实测优雅停止会写 `vpn_server.config` 且**不需要管理密码**，正好避开
+     "设了密码后 unauthenticated Flush 被静默拒绝"这一整类失效。注意 `vpnserver stop` 是**异步**的，
+     脚本会等到原进程真的退出（或被 procd 重新拉起）才返回 —— 不等的时候实测"建完 10 秒重启"仍会丢，
+     等上之后同样的操作能保住；
    - 这条是必须的：实测（同一台设备，服务端已设密码）—— 没有 K 链接时，新建 HUB 后 9 秒 `reboot` 就丢；
      补上 `STOP=10` 生成 K 链接后，同样"建完 9 秒就重启"的 HUB 重启后仍在（磁盘与运行中都能看到）；
    - 页面上有"保存配置到磁盘"和"每 5 分钟自动保存"两个按钮，分别调用上面两个 helper；`Flush`

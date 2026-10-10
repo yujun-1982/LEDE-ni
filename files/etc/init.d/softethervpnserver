@@ -39,6 +39,28 @@ flush_conf() {
 }
 
 stop_service() {
+	# Preferred: SoftEther's own graceful stop, which writes vpn_server.config
+	# and - measured on the device - needs no management password, so it cannot
+	# silently fail the way an unauthenticated 'Flush' does.
+	#
+	# 'vpnserver stop' only *asks*; the daemon keeps running for a second while it
+	# saves. Returning immediately let the shutdown path tear everything down
+	# before the write landed (measured: a hub created 10 s before a reboot was
+	# still lost), so wait until the process is really gone.
+	if [ -x "${STORE}/vpnserver" ] && pgrep -x vpnserver >/dev/null 2>&1; then
+		oldpid=$(pgrep -x vpnserver | head -n 1)
+		(cd "${STORE}" && ./vpnserver stop >/dev/null 2>&1)
+		i=0
+		while [ "${i}" -lt 15 ]; do
+			# Gone, or replaced by procd's respawn: either way the original daemon
+			# has finished saving.
+			newpid=$(pgrep -x vpnserver | head -n 1)
+			[ -z "${newpid}" ] && break
+			[ "${newpid}" != "${oldpid}" ] && break
+			sleep 1
+			i=$((i + 1))
+		done
+	fi
 	flush_conf
 }
 
