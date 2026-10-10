@@ -84,12 +84,12 @@ start_service() {
 	if ! grep -q 'AutoSaveConfigSpan 300' "${STORE}/vpn_server.config" 2>/dev/null; then
 		(
 			i=0
-			while [ "${i}" -lt 12 ]; do
+			while [ "${i}" -lt 8 ]; do
 				sleep 5
 				/usr/libexec/softethervpn-set-autosave 300 >/dev/null 2>&1 && break
 				i=$((i + 1))
 			done
-			[ "${i}" -lt 12 ] || logger -t softethervpn5 "could not set AutoSaveConfigSpan to 300 - if a management password is set, write it to ${STORE}/management.password"
-		) &
+			[ "${i}" -lt 8 ] || logger -t softethervpn5 "could not set AutoSaveConfigSpan to 300 - if a management password is set, write it to ${STORE}/management.password"
+		) >/dev/null 2>&1 &
 	fi
 }
