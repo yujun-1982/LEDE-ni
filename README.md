@@ -162,6 +162,14 @@ wg genkey | tee privatekey | wg pubkey > publickey
    init 脚本、两个 helper 和页面按钮都会读这个文件（首行密码，权限 600，只留在设备上，**绝不要提交进仓库**；
    密码也不会经过浏览器）。没这个文件时它们照旧跳过。注意 300 秒的自动保存是服务端内部行为、不需要凭据，
    所以只要间隔确实是 300，忘了登记密码最坏也只丢 5 分钟。
+
+   **复核（2026-10-09，测试路由器）**：镜像本身是 `c04efcc`，把上面这版三个脚本装进设备并登记密码后，
+   磁盘配置 `AutoSaveConfigSpan` 变成 300、`softethervpn-flush` 输出 `Saving completed`，随后一次真实
+   `reboot` 起来，HUB、用户、以及**本地桥接**（`DEFAULT ↔ eth0`，`TapMode true`）都恢复为 `Operating`，
+   监听 443/992/1194/5555 全在。顺便更正一个容易误判的点：本地桥接是存在服务端自己的
+   `vpn_server.config` 里的（`LocalBridgeList` → `LocalBridge<N>`：`DeviceName`/`HubName`/`TapMode`），
+   所以它和 HUB 一样"要么一起保住、要么一起丢"，并不是 Windows 侧的东西；`BridgeList`/`BridgeCreate`/
+   `BridgeDelete` 是服务端级命令（`ServerBridgeList`、`DeviceList` 不存在）。
 3. 在服务端上直接 `apk add --upgrade softethervpn5-server` 会用上游脚本覆盖我们这份，
    升级后需要重新刷本仓库的镜像（或手工恢复）；另外 SoftEther 若开启日志，日志也落在
    `/etc/softethervpn-server`，长期大量写日志会消耗闪存，建议只在排障时开。
