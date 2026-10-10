@@ -36,11 +36,19 @@ LOG='/tmp/uci-defaults-97-softethervpn.log'
 	"${INIT}" disable
 	echo "disable rc=$?"
 
-	if ls /etc/rc.d/*softethervpnserver >/dev/null 2>&1; then
-		echo "FAIL: a boot-time symlink is still present"
+	# `disable` removes the shutdown link as well, and /etc/inittab runs
+	# `rcS K shutdown` over /etc/rc.d/K* only - without that link stop_service(),
+	# and therefore the Flush, is never called on reboot, so every change made
+	# since the last auto-save is lost. Recreate it: a reboot then always persists,
+	# autostart or not.
+	ln -sf ../init.d/softethervpnserver /etc/rc.d/K10softethervpnserver
+
+	if ls /etc/rc.d/S*softethervpnserver >/dev/null 2>&1; then
+		echo "FAIL: a boot-time (S) symlink is still present"
 	else
-		echo "autostart: off (no /etc/rc.d link)"
+		echo "autostart: off (no S link)"
 	fi
+	echo "shutdown link: $(ls /etc/rc.d/K10softethervpnserver 2>/dev/null || echo MISSING)"
 
 	if pgrep -x vpnserver >/dev/null 2>&1; then
 		# Match by process name, not argv: 'pgrep -f vpnserver' also matches any

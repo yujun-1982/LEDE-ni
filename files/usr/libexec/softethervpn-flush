@@ -34,5 +34,5 @@ case "${out}" in
 esac
 
 echo "Flush did not happen:" >&2
-echo "${out}" | grep -aiE 'denied|password|error|welcome' | head -2 >&2
+echo "${out}" | grep -aoiE 'access has been denied[^.]*|incorrect[^.]*|error code: [0-9]+' | head -2 >&2
 exit 1

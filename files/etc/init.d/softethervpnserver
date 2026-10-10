@@ -1,6 +1,12 @@
 #!/bin/sh /etc/rc.common
 
 START=91
+# STOP is what makes `enable` create the /etc/rc.d/K link, and /etc/inittab runs
+# `rcS K shutdown` on reboot/halt. Without it stop_service() - and therefore the
+# Flush - is never called at shutdown, so any change made in the last
+# AutoSaveConfigSpan seconds was lost on a plain reboot (measured: hub created
+# 30 s before `reboot` was gone afterwards).
+STOP=10
 USE_PROCD=1
 
 # The package's own init script keeps its data directory in /var/softethervpn,
