@@ -125,7 +125,7 @@ wg genkey | tee privatekey | wg pubkey > publickey
 - `97-softethervpn-server-no-autostart` 顺手把 `/etc/softethervpn-server` 加进
   `/etc/sysupgrade.conf`，带配置升级时配置一起保留。
 
-注意四点：
+注意五点：
 
 1. **改动只在三种时机写盘，其中"自动保存"默认是 24 小时。** 真机验证过：`HubCreate` 之后
    `vpn_server.config` 的 md5/大小/mtime 全不变，而运行中的服务已能看到新 HUB —— SoftEther 5.x
@@ -142,9 +142,15 @@ wg genkey | tee privatekey | wg pubkey > publickey
    - **每次 `start` 还会自愈一次**：init 脚本发现磁盘上的配置里间隔不是 300（例如从 VPN Server
      Manager 里"载入配置文件"、或从旧设备恢复了备份，都会把 86400 带回来），就在后台等服务端起来后
      重新压缩，最多试 12 次；
-   - init 脚本 `stop_service()` 里先 `Flush` 再让 procd 杀进程，所以 `stop`/`restart`/正常 `reboot`
-     立刻落盘；`Flush` 统一走 `files/usr/libexec/softethervpn-flush`，失败会写系统日志（不再静默）；
-   - 页面上有"保存配置到磁盘"和"每 5 分钟自动保存"两个按钮，分别调用上面两个 helper。
+   - init 脚本 `stop_service()` 里先 `Flush` 再让 procd 杀进程。**注意：这条只在 `stop`/`restart`
+     以及"关机时真的调用了 stop"时生效** —— `/etc/inittab` 的关机行是 `::shutdown:/etc/init.d/rcS K shutdown`，
+     它只遍历 `/etc/rc.d/K*` 链接；而 `rc.common` 只有在脚本里定义了 `STOP=` 才会为 `enable` 创建 K 链接。
+     本仓库的脚本定义了 `STOP=10`，并且 `97-softethervpn-server-no-autostart` 会在关掉自启后**补建**
+     `/etc/rc.d/K10softethervpnserver`，所以正常 `reboot`/`halt` 一定先 Flush 再停机；
+   - 这条是必须的：实测（同一台设备，服务端已设密码）—— 没有 K 链接时，新建 HUB 后 9 秒 `reboot` 就丢；
+     补上 `STOP=10` 生成 K 链接后，同样"建完 9 秒就重启"的 HUB 重启后仍在（磁盘与运行中都能看到）；
+   - 页面上有"保存配置到磁盘"和"每 5 分钟自动保存"两个按钮，分别调用上面两个 helper；`Flush`
+     统一走 `files/usr/libexec/softethervpn-flush`，失败会写系统日志（不再静默）；
    合计效果：**硬重启最多丢 5 分钟**，正常重启/关机不丢。已实测确认：08:03:51 `HubCreate zztimer`
    后磁盘文件仍是旧的 20287 字节、里面查不到这个名字，之后**我没有执行任何 `Flush`**，到 08:09
    文件自己涨到 26515 字节并含该 HUB；紧接一次 `reboot`（同样没 Flush）起来后 `HubList`
@@ -176,6 +182,18 @@ wg genkey | tee privatekey | wg pubkey > publickey
 4. `vpncmd` 的正确形式是 `vpncmd localhost:5555 /server /CMD <命令>`；取/灌整份配置用
    `/OUT:文件 /CMD ConfigGet` 和 `printf '文件路径\n' | vpncmd … /CMD ConfigSet`（`ConfigSet` 的
    路径是交互输入的，`/IN:` 无效）；`HubCreate` 会交互式询问 HUB 密码，脚本化时喂换行走默认值。
+5. **本地桥接用的 TAP 接口要在网络起来之前存在**，否则"桥接重启后失效"。Linux 下 SoftEther 会为
+   `TapMode true` 的桥接自己开一个内核 TAP（名字形如 `tap_eth0`），但它的 init 是 `S91`，
+   而 `br-lan` 在 `S20network` 就组装完了 —— UCI 里把这个 TAP 列为 br-lan 端口时，接口当时不存在会被
+   netifd 直接跳过，于是重启后 TAP 虽然被 SoftEther 重新建出来，却**不再是 br-lan 的成员**，VPN 客户端
+   桥不进局域网，看起来就像"tap 设备和桥接都没了"。本仓库加 `files/etc/init.d/softethertaps`
+   （`START=19`，早于 network）：把 `/etc/config/network` 里引用到、但系统里还没有的 `tap*` 接口
+   用 `ip tuntap add … mode tap` 建成**持久 TAP** 并 `up`，netifd 随后就能把它并入 br-lan，SoftEther
+   启动时直接复用这个已存在的 TAP。实测：开机日志 `softethertaps: created tap_eth0` 早于
+   `starting vpnserver`，重启后 `ip -d link show tap_eth0` 显示 `master br-lan`，
+   `BridgeList` 为 `DEFAULT ↔ eth0 / Operating`。
+   在 LuCI 里加 TAP 的做法：网络 → 接口 → 桥接 br-lan → 物理设置里勾选/填入 `tap_eth0`
+   （保存后它成为 UCI 的一个端口，本脚本才会创建它）。
 
 ## 安全提醒
 
