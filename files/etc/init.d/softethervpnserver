@@ -33,8 +33,12 @@ STOCK=/usr/libexec/softethervpn
 flush_conf() {
 	[ -x /usr/libexec/softethervpn-flush ] || return 0
 	pgrep -x vpnserver >/dev/null 2>&1 || return 0
-	if ! /usr/libexec/softethervpn-flush >/dev/null 2>&1; then
-		logger -t softethervpn5 "Flush at stop was refused - if a server management password is set, write it to ${STORE}/management.password (mode 600); until then a hard reset costs up to AutoSaveConfigSpan seconds of changes"
+	out=$(/usr/libexec/softethervpn-flush 2>&1)
+	rc=$?
+	if [ "$rc" -eq 0 ]; then
+		logger -t softethervpn5 "configuration Flush succeeded: $out"
+	else
+		logger -t softethervpn5 "configuration Flush failed (rc=$rc): $out; check ${STORE}/management.password and AutoSaveConfigSpan"
 	fi
 }
 
@@ -60,12 +64,19 @@ stop_service() {
 			sleep 1
 			i=$((i + 1))
 		done
+		newpid=$(pgrep -x vpnserver | head -n 1)
+		if [ -n "${newpid}" ] && [ "${newpid}" = "${oldpid}" ]; then
+			logger -t softethervpn5 "graceful stop timed out after 15 seconds; attempting authenticated Flush while daemon is still running"
+		fi
 	fi
 	flush_conf
 }
 
 start_service() {
 	mkdir -p -m 0755 "${STORE}"
+	if [ -f "${STORE}/management.password" ]; then
+		chmod 0600 "${STORE}/management.password"
+	fi
 
 	# vpnserver looks for hamcore.se2 and vpn_server.config next to the binary it
 	# was started from, and that path is resolved through symlinks, so the binary
