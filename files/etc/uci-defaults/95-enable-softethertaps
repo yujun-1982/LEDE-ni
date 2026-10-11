@@ -1,0 +1,9 @@
+#!/bin/sh
+# Ensure the TAP bootstrap runs before netifd assembles br-lan.
+# uci-defaults executes early during first boot; start the helper immediately
+# once, then keep it enabled for subsequent boots.
+INIT='/etc/init.d/softethertaps'
+[ -x "$INIT" ] || exit 0
+"$INIT" enable || logger -t softethertaps-enable "failed to enable TAP bootstrap"
+"$INIT" start || logger -t softethertaps-enable "TAP bootstrap returned an error"
+exit 0
