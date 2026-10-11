@@ -24,7 +24,7 @@ openwrt/bin/targets/x86/64/openwrt-x86-64-generic-squashfs-combined.img.gz
 - 本地和 GitHub Actions 共用 `build.sh`，避免两套 feed 注入及配置校验逻辑漂移。
 - 默认并行任务数最多为 4；GitHub Actions 使用最多 2 个任务。可用 `JOBS=N ./build.sh` 调整。
 - `build.sh` 不会静默覆盖没有本仓库标记的既有 OpenWrt `.config` 或 `files/`。旧构建目录需先审查并备份，然后显式设置 `ALLOW_EXISTING_OPENWRT=1`；再次运行时会把原配置和 overlay 备份到 `.build-backups/`。
-- 可以通过 `OPENWRT_REF` 指定 OpenWrt 分支或标签；准备阶段生成 `openwrt/build-sources.txt`，记录源码/feed 的确切 commit，便于审计。默认仍使用滚动的 `master`，因此要严格复现某次构建，应固定相应上游版本。
+- 在首次克隆源码前，可以通过 `OPENWRT_REF` 指定 OpenWrt 分支或标签；已有源码树若与所选 ref 不一致，脚本会停止而不会静默切换。准备阶段生成 `openwrt/build-sources.txt`，记录源码/feed 的确切 commit，便于审计。默认仍使用滚动的 `master`，因此要严格复现某次构建，应固定相应上游版本。
 - SoftEther TAP bootstrap 由首次启动脚本立即运行，并启用后续开机启动；启动顺序应在 netifd 组装 LAN bridge 之前。运行时仍需确认 `tap_*` 确实是 `br-lan` 成员。
 - APK 安装日志会记录 SHA-256；若提供同名 `.apk.sha256` sidecar，则安装前强制校验。未提供 sidecar 的现有 APK 仍会按原流程安装。
 - 按要求 root 密码仍为空。不要将 LuCI/SSH/VPN 管理端口暴露到不可信网络；SoftEther 服务端管理密码独立设置并保存在设备本地，绝不提交到仓库。
