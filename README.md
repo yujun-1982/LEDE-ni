@@ -107,11 +107,7 @@ wg genkey | tee privatekey | wg pubkey > publickey
 1. **443**：不自启时 SoftEther 不会占 443。若你手工启动服务端，它新建 `vpn_server.config`
    时默认监听 443/992/1194/5555，会和 uhttpd 的 `listen_https` 撞。确认占用：
    `netstat -ltnp | grep -E ':(443|5555|992)\b'`；改端口用 `vpncmd` 连本机 → `ServerPortNum`。
-2. **HTTPS 目前仍然不可用，原因不是端口**。镜像里没有证书生成器——`/usr/sbin/px5g` 和
-   `openssl` 命令行都不存在（只有 `libopenssl3`/`libmbedtls` 这些库），所以
-   `/etc/init.d/uhttpd` 的 `generate_keys()` 什么也生成不出来，`/etc/uhttpd.crt`/`.key`
-   不存在，uhttpd 只挂 80 端口。要让 HTTPS 开箱可用，在 `seed.config` 里加
-   `CONFIG_PACKAGE_px5g-mbedtls=y` 重新构建即可（当前按决定保持不变）。
+2. **HTTPS 需要在新固件上验证**。当前配置已把 `px5g-mbedtls` 证书生成工具编入镜像，uhttpd 应能在启动时生成证书并尝试监听 443；这次尚未在 PVE 实机验证。刷机后检查 `ls -l /etc/uhttpd.crt /etc/uhttpd.key` 和 `netstat -ltnp | grep ':443'`。如果 443 未监听，先查看 `logread | grep -i uhttpd`。注意 SoftEther 服务端默认也可能监听 443，启动它前需确认端口没有冲突。
 3. **没有虚拟 hub 和用户**。root 是空密码（Web 界面直接进），服务端首次启动仍要
    `vpncmd` → `ServerPasswordSet`/`HubCreate`/`UserCreate` 才能连。另外
    `files/etc/config/network` 按清单只定义了 `br-lan`，没有 wan 口和端口转发规则，
