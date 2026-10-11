@@ -7,10 +7,10 @@ OpenWrt 25.12+（master 分支，apk 包管理）x86/64 定制固件的构建配
 ## 构建
 
 ```bash
-git clone https://github.com/yujun-1982/lede.git
-cd lede
+git clone https://github.com/yujun-1982/LEDE-ni.git
+cd LEDE-ni
 ./build.sh                       # 准备源码树、feed、.config、overlay
-cd openwrt && make -j$(nproc) V=s
+cd openwrt && make -j4 V=s       # 默认建议最多 4 个并行任务
 ```
 
 产物（PVE 用 `qm importdisk` 导入的就是它）：
@@ -18,6 +18,16 @@ cd openwrt && make -j$(nproc) V=s
 ```
 openwrt/bin/targets/x86/64/openwrt-x86-64-generic-squashfs-combined.img.gz
 ```
+
+## 构建安全与可复现性说明
+
+- 本地和 GitHub Actions 共用 `build.sh`，避免两套 feed 注入及配置校验逻辑漂移。
+- 默认并行任务数最多为 4；GitHub Actions 使用最多 2 个任务。可用 `JOBS=N ./build.sh` 调整。
+- `build.sh` 不会静默覆盖没有本仓库标记的既有 OpenWrt `.config` 或 `files/`。旧构建目录需先审查并备份，然后显式设置 `ALLOW_EXISTING_OPENWRT=1`；再次运行时会把原配置和 overlay 备份到 `.build-backups/`。
+- 可以通过 `OPENWRT_REF` 指定 OpenWrt 分支或标签；准备阶段生成 `openwrt/build-sources.txt`，记录源码/feed 的确切 commit，便于审计。默认仍使用滚动的 `master`，因此要严格复现某次构建，应固定相应上游版本。
+- SoftEther TAP bootstrap 由首次启动脚本立即运行，并启用后续开机启动；启动顺序应在 netifd 组装 LAN bridge 之前。运行时仍需确认 `tap_*` 确实是 `br-lan` 成员。
+- APK 安装日志会记录 SHA-256；若提供同名 `.apk.sha256` sidecar，则安装前强制校验。未提供 sidecar 的现有 APK 仍会按原流程安装。
+- 按要求 root 密码仍为空。不要将 LuCI/SSH/VPN 管理端口暴露到不可信网络；SoftEther 服务端管理密码独立设置并保存在设备本地，绝不提交到仓库。
 
 ## 配置概要
 
@@ -32,9 +42,9 @@ openwrt/bin/targets/x86/64/openwrt-x86-64-generic-squashfs-combined.img.gz
 | root 密码 | **空**（本仓库不再写入密码；Web 界面直接进，SSH 密码登录会被 dropbear 拒绝，见"安全提醒"） |
 | 主题 | Argon + Argon 设置页（`files/etc/uci-defaults/96-set-luci-ui` 设 mediaurlbase） |
 | 语言 | 简体中文（`luci.main.lang='zh_cn'`，翻译包由 `CONFIG_LUCI_LANG_zh_Hans` 点亮，见下） |
-| 分流 | 官方 nftables flow offloading（`files/etc/config/firewall` 的 lan zone） |
+| 分流 | 官方 nftables flow offloading（位于 firewall defaults，硬件 offload 关闭） |
 | SoftEther | 服务端二进制已装，**默认不自启**（首次开机脚本显式 disable）；客户端不装；配置落在 `/etc/softethervpn-server`，并把自动保存间隔从 86400 秒压到 300 秒 |
-| Web 管理 | HTTP 80；443 已配置但**实际不监听**——镜像内没有证书生成器（`px5g`/`openssl` CLI 都没有），详见"SoftEther 服务端"一节 |
+| Web 管理 | 保留 root 空密码设置；构建包含 `px5g-mbedtls` 证书生成工具，仍需在生成固件后确认 HTTPS 443 实际监听 |
 
 ## 插件
 
