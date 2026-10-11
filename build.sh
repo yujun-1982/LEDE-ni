@@ -40,7 +40,12 @@ if [ ! -d "${SCRIPT_DIR}/${OPENWRT_DIR}/.git" ]; then
     git clone --depth 1 -b "${OPENWRT_REF}" "${OPENWRT_REPO}" "${SCRIPT_DIR}/${OPENWRT_DIR}"
     info "cloned ${OPENWRT_REPO} (${OPENWRT_REF})"
 else
-    info "reusing existing checkout at ${SCRIPT_DIR}/${OPENWRT_DIR}"
+    EXISTING_REF=$(git -C "${SCRIPT_DIR}/${OPENWRT_DIR}" describe --tags --exact-match 2>/dev/null || git -C "${SCRIPT_DIR}/${OPENWRT_DIR}" branch --show-current)
+    if [ "${EXISTING_REF}" != "${OPENWRT_REF}" ]; then
+        error "Existing OpenWrt checkout is on '${EXISTING_REF:-detached HEAD}', but OPENWRT_REF='${OPENWRT_REF}'. To avoid silently changing source versions, use a fresh openwrt/ tree for a different ref."
+        exit 1
+    fi
+    info "reusing existing checkout at ${SCRIPT_DIR}/${OPENWRT_DIR} (${EXISTING_REF})"
 fi
 OPENWRT_DIR="${SCRIPT_DIR}/${OPENWRT_DIR}"
 
