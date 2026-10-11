@@ -67,6 +67,8 @@ stop_service() {
 		newpid=$(pgrep -x vpnserver | head -n 1)
 		if [ -n "${newpid}" ] && [ "${newpid}" = "${oldpid}" ]; then
 			logger -t softethervpn5 "graceful stop timed out after 15 seconds; attempting authenticated Flush while daemon is still running"
+		else
+			logger -t softethervpn5 "graceful stop completed; daemon exited or was replaced after save"
 		fi
 	fi
 	flush_conf
