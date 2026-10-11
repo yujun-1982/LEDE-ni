@@ -202,7 +202,7 @@ wg genkey | tee privatekey | wg pubkey > publickey
    而 `br-lan` 在 `S20network` 就组装完了 —— UCI 里把这个 TAP 列为 br-lan 端口时，接口当时不存在会被
    netifd 直接跳过，于是重启后 TAP 虽然被 SoftEther 重新建出来，却**不再是 br-lan 的成员**，VPN 客户端
    桥不进局域网，看起来就像"tap 设备和桥接都没了"。本仓库加 `files/etc/init.d/softethertaps`
-   （`START=19`，早于 network）：把 `/etc/config/network` 里引用到、但系统里还没有的 `tap*` 接口
+   （`START=19`，早于 network），并由首次启动脚本立即运行及启用后续开机启动：把 `/etc/config/network` 里引用到、但系统里还没有的 `tap*` 接口
    用 `ip tuntap add … mode tap` 建成**持久 TAP** 并 `up`，netifd 随后就能把它并入 br-lan，SoftEther
    启动时直接复用这个已存在的 TAP。实测：开机日志 `softethertaps: created tap_eth0` 早于
    `starting vpnserver`，重启后 `ip -d link show tap_eth0` 显示 `master br-lan`，
