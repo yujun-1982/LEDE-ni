@@ -3,6 +3,9 @@ config defaults
 	option output 'ACCEPT'
 	option forward 'ACCEPT'
 	option syn_flood '1'
+	# Flow offloading belongs to firewall defaults, not an individual zone.
+	option flow_offloading '1'
+	option flow_offloading_hw '0'
 
 config zone
 	option name 'lan'
@@ -10,9 +13,6 @@ config zone
 	option input 'ACCEPT'
 	option output 'ACCEPT'
 	option forward 'ACCEPT'
-	# Official nftables flow offloading (kmod-nft-offload)
-	option flow_offloading '1'
-	option flow_offloading_hw '0'
 
 config include
 	option path '/etc/firewall.user'
