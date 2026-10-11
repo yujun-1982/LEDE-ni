@@ -47,6 +47,20 @@ out="${LOG_FILE}.out"
 for pkg in "${PKG_DIR}"/*.ipk "${PKG_DIR}"/*.apk; do
 	[ -f "${pkg}" ] || continue
 	log "Installing: ${pkg}"
+	if command -v sha256sum >/dev/null 2>&1; then
+		actual_hash=$(sha256sum "${pkg}" | awk '{print $1}')
+		log "SHA-256 ${pkg##*/}: ${actual_hash}"
+		# Optional sidecar format: <64-hex-digest><space><filename>.
+		# Existing packages need no sidecar, but when one is supplied it is enforced.
+		if [ -f "${pkg}.sha256" ]; then
+			expected_hash=$(awk 'NR == 1 {print $1}' "${pkg}.sha256")
+			if [ "${actual_hash}" != "${expected_hash}" ]; then
+				log "ERROR: SHA-256 mismatch for ${pkg}; refusing to install"
+				failed="${failed} ${pkg}"
+				continue
+			fi
+		fi
+	fi
 
 	case "${PKG_MGR}" in
 		opkg)	opkg install --force-depends "${pkg}" >"${out}" 2>&1 ;;
@@ -68,7 +82,10 @@ done
 if [ -n "${failed}" ]; then
 	log "Retaining ${PKG_DIR}. Retry manually with:"
 	for f in ${failed}; do
-		log "  ${PKG_MGR} add --allow-untrusted ${f}"
+		case "${PKG_MGR}" in
+			apk) log "  apk add --allow-untrusted ${f}" ;;
+			opkg) log "  opkg install --force-depends ${f}" ;;
+		esac
 	done
 else
 	log "All packages installed. Cleaning up ${PKG_DIR}."
