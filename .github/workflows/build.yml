@@ -64,8 +64,8 @@ jobs:
         run: |
           mkdir -p artifacts
           if [ -d openwrt/bin/targets ]; then
-            find openwrt/bin/targets -type f \\( -name '*.img.gz' -o -name '*.bin' -o -name '*.img' \\
-              -o -name '*.manifest' -o -name '*.buildinfo' \\) -exec cp {} artifacts/ \\;
+            find openwrt/bin/targets -type f \( -name '*.img.gz' -o -name '*.bin' -o -name '*.img' \
+              -o -name '*.manifest' -o -name '*.buildinfo' \) -exec cp {} artifacts/ \;
           fi
           [ ! -f openwrt/.config ] || cp openwrt/.config artifacts/config.build
           [ ! -f openwrt/build-sources.txt ] || cp openwrt/build-sources.txt artifacts/
