@@ -12,6 +12,11 @@ on:
 permissions:
   contents: read
 
+# Keep only the latest firmware build running for this branch/PR.
+concurrency:
+  group: openwrt-build-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 env:
   DEBIAN_FRONTEND: noninteractive
   OPENWRT_REF: master
