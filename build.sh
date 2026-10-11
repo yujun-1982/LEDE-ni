@@ -65,6 +65,8 @@ sed -i "/^src-link[^ ]* ${CUSTOM_FEED_NAME} /d" feeds.conf.default
 echo "src-link ${CUSTOM_FEED_NAME} ${SCRIPT_DIR}/package" >> feeds.conf.default
 
 mkdir -p package/feeds/argon
+# Remove only stale temporary clone paths left by an interrupted previous run.
+rm -rf package/feeds/argon/luci-theme-argon.new package/feeds/argon/luci-app-argon-config.new
 # These are generated upstream checkouts, not user configuration. Replace them
 # only after preserving the current config and files overlay below.
 git clone --depth 1 "${ARGON_FEED_URL}" package/feeds/argon/luci-theme-argon.new
