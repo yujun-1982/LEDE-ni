@@ -26,6 +26,15 @@ jobs:
       - name: Checkout this repo
         uses: actions/checkout@v4
 
+      - name: Static shell syntax checks
+        run: |
+          set -euo pipefail
+          bash -n build.sh
+          while IFS= read -r -d '' script; do
+            sh -n "$script"
+          done < <(find files/etc/init.d files/etc/uci-defaults files/usr/libexec -type f -print0)
+          echo "Shell syntax checks passed."
+
       - name: Install build dependencies
         run: |
           sudo apt-get update
