@@ -2,6 +2,7 @@
 /openwrt/
 
 # Local build output / downloaded CI artifacts
+/.build-backups/
 /artifacts/
 /open/
 

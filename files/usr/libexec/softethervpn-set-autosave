@@ -57,8 +57,20 @@ printf '%s\n' "${tmp}" | timeout 40 "${BIN}" localhost:5555 /server ${AUTH} /CMD
 }
 
 sleep 5
+# A successful ConfigSet does not prove that the resulting configuration reached
+# disk. Treat Flush errors as failures so boot-time retries and logs can surface them.
 # shellcheck disable=SC2086
-timeout 20 "${BIN}" localhost:5555 /server ${AUTH} /CMD Flush </dev/null >/dev/null 2>&1
+flush_out=$(timeout 20 "${BIN}" localhost:5555 /server ${AUTH} /CMD Flush </dev/null 2>&1)
+flush_rc=$?
+case "${flush_out}" in
+	*"Saving completed"* | *"command completed successfully"*)
+		echo "${flush_out}" | grep -ao 'Saving completed[^.]*\.' | head -1
+		;;
+	*)
+		echo "Flush failed (rc=${flush_rc}): $(echo "${flush_out}" | grep -aoiE 'access has been denied[^.]*|incorrect[^.]*|error code: [0-9]+' | head -1)" >&2
+		exit 1
+		;;
+esac
 
 # Report what the server actually kept - it clamps the value to its own minimum.
 rm -f "${tmp}"

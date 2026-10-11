@@ -7,10 +7,10 @@ OpenWrt 25.12+（master 分支，apk 包管理）x86/64 定制固件的构建配
 ## 构建
 
 ```bash
-git clone https://github.com/yujun-1982/lede.git
-cd lede
+git clone https://github.com/yujun-1982/LEDE-ni.git
+cd LEDE-ni
 ./build.sh                       # 准备源码树、feed、.config、overlay
-cd openwrt && make -j$(nproc) V=s
+cd openwrt && make -j4 V=s       # 默认建议最多 4 个并行任务
 ```
 
 产物（PVE 用 `qm importdisk` 导入的就是它）：
@@ -18,6 +18,16 @@ cd openwrt && make -j$(nproc) V=s
 ```
 openwrt/bin/targets/x86/64/openwrt-x86-64-generic-squashfs-combined.img.gz
 ```
+
+## 构建安全与可复现性说明
+
+- 本地和 GitHub Actions 共用 `build.sh`，避免两套 feed 注入及配置校验逻辑漂移。
+- 默认并行任务数最多为 4；GitHub Actions 使用最多 2 个任务。可用 `JOBS=N ./build.sh` 调整。
+- `build.sh` 不会静默覆盖没有本仓库标记的既有 OpenWrt `.config` 或 `files/`。旧构建目录需先审查并备份，然后显式设置 `ALLOW_EXISTING_OPENWRT=1`；再次运行时会把原配置和 overlay 备份到 `.build-backups/`。
+- 在首次克隆源码前，可以通过 `OPENWRT_REF` 指定 OpenWrt 分支或标签；已有源码树若与所选 ref 不一致，脚本会停止而不会静默切换。准备阶段生成 `openwrt/build-sources.txt`，记录源码/feed 的确切 commit，便于审计。默认仍使用滚动的 `master`，因此要严格复现某次构建，应固定相应上游版本。
+- SoftEther TAP bootstrap 由首次启动脚本立即运行，并启用后续开机启动；启动顺序应在 netifd 组装 LAN bridge 之前。运行时仍需确认 `tap_*` 确实是 `br-lan` 成员。
+- APK 安装日志会记录 SHA-256；若提供同名 `.apk.sha256` sidecar，则安装前强制校验。未提供 sidecar 的现有 APK 仍会按原流程安装。
+- 按要求 root 密码仍为空。不要将 LuCI/SSH/VPN 管理端口暴露到不可信网络；SoftEther 服务端管理密码独立设置并保存在设备本地，绝不提交到仓库。
 
 ## 配置概要
 
@@ -28,13 +38,13 @@ openwrt/bin/targets/x86/64/openwrt-x86-64-generic-squashfs-combined.img.gz
 | 分区 | Kernel 256 MiB / Rootfs 1024 MiB |
 | 引导 | GRUB，串口控制台开启 @115200，`quiet loglevel=0`，timeout `0`，无 EFI |
 | 镜像格式 | 仅 gzip 压缩的 `.img.gz`（不出 ext4 / EFI / VDI / QCOW2 / VMDK） |
-| LAN | `br-lan` 桥接（成员口 `eth0`）静态 `10.10.10.2/24` |
+| LAN | `br-lan` 桥接（成员口 `eth0`）静态 `10.10.10.2/24`；网关 `10.10.10.1`；DNS `61.130.254.34`、`223.5.5.5` |
 | root 密码 | **空**（本仓库不再写入密码；Web 界面直接进，SSH 密码登录会被 dropbear 拒绝，见"安全提醒"） |
 | 主题 | Argon + Argon 设置页（`files/etc/uci-defaults/96-set-luci-ui` 设 mediaurlbase） |
 | 语言 | 简体中文（`luci.main.lang='zh_cn'`，翻译包由 `CONFIG_LUCI_LANG_zh_Hans` 点亮，见下） |
-| 分流 | 官方 nftables flow offloading（`files/etc/config/firewall` 的 lan zone） |
+| 分流 | 官方 nftables flow offloading（位于 firewall defaults，硬件 offload 关闭） |
 | SoftEther | 服务端二进制已装，**默认不自启**（首次开机脚本显式 disable）；客户端不装；配置落在 `/etc/softethervpn-server`，并把自动保存间隔从 86400 秒压到 300 秒 |
-| Web 管理 | HTTP 80；443 已配置但**实际不监听**——镜像内没有证书生成器（`px5g`/`openssl` CLI 都没有），详见"SoftEther 服务端"一节 |
+| Web 管理 | 保留 root 空密码设置；构建包含 `px5g-mbedtls` 证书生成工具，仍需在生成固件后确认 HTTPS 443 实际监听 |
 
 ## 插件
 
@@ -97,11 +107,7 @@ wg genkey | tee privatekey | wg pubkey > publickey
 1. **443**：不自启时 SoftEther 不会占 443。若你手工启动服务端，它新建 `vpn_server.config`
    时默认监听 443/992/1194/5555，会和 uhttpd 的 `listen_https` 撞。确认占用：
    `netstat -ltnp | grep -E ':(443|5555|992)\b'`；改端口用 `vpncmd` 连本机 → `ServerPortNum`。
-2. **HTTPS 目前仍然不可用，原因不是端口**。镜像里没有证书生成器——`/usr/sbin/px5g` 和
-   `openssl` 命令行都不存在（只有 `libopenssl3`/`libmbedtls` 这些库），所以
-   `/etc/init.d/uhttpd` 的 `generate_keys()` 什么也生成不出来，`/etc/uhttpd.crt`/`.key`
-   不存在，uhttpd 只挂 80 端口。要让 HTTPS 开箱可用，在 `seed.config` 里加
-   `CONFIG_PACKAGE_px5g-mbedtls=y` 重新构建即可（当前按决定保持不变）。
+2. **HTTPS 需要在新固件上验证**。当前配置已把 `px5g-mbedtls` 证书生成工具编入镜像，uhttpd 应能在启动时生成证书并尝试监听 443；这次尚未在 PVE 实机验证。刷机后检查 `ls -l /etc/uhttpd.crt /etc/uhttpd.key` 和 `netstat -ltnp | grep ':443'`。如果 443 未监听，先查看 `logread | grep -i uhttpd`。注意 SoftEther 服务端默认也可能监听 443，启动它前需确认端口没有冲突。
 3. **没有虚拟 hub 和用户**。root 是空密码（Web 界面直接进），服务端首次启动仍要
    `vpncmd` → `ServerPasswordSet`/`HubCreate`/`UserCreate` 才能连。另外
    `files/etc/config/network` 按清单只定义了 `br-lan`，没有 wan 口和端口转发规则，
@@ -192,7 +198,7 @@ wg genkey | tee privatekey | wg pubkey > publickey
    而 `br-lan` 在 `S20network` 就组装完了 —— UCI 里把这个 TAP 列为 br-lan 端口时，接口当时不存在会被
    netifd 直接跳过，于是重启后 TAP 虽然被 SoftEther 重新建出来，却**不再是 br-lan 的成员**，VPN 客户端
    桥不进局域网，看起来就像"tap 设备和桥接都没了"。本仓库加 `files/etc/init.d/softethertaps`
-   （`START=19`，早于 network）：把 `/etc/config/network` 里引用到、但系统里还没有的 `tap*` 接口
+   （`START=19`，早于 network），并由首次启动脚本立即运行及启用后续开机启动：把 `/etc/config/network` 里引用到、但系统里还没有的 `tap*` 接口
    用 `ip tuntap add … mode tap` 建成**持久 TAP** 并 `up`，netifd 随后就能把它并入 br-lan，SoftEther
    启动时直接复用这个已存在的 TAP。实测：开机日志 `softethertaps: created tap_eth0` 早于
    `starting vpnserver`，重启后 `ip -d link show tap_eth0` 显示 `master br-lan`，
