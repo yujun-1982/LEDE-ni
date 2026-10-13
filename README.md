@@ -198,7 +198,9 @@ wg genkey | tee privatekey | wg pubkey > publickey
    `starting vpnserver`，重启后 `ip -d link show tap_eth0` 显示 `master br-lan`，
    `BridgeList` 为 `DEFAULT ↔ eth0 / Operating`。
    在 LuCI 里加 TAP 的做法：网络 → 接口 → 桥接 br-lan → 物理设置里勾选/填入 `tap_eth0`
-   （保存后它成为 UCI 的一个端口，本脚本才会创建它）。
+   （保存后它成为 UCI 的一个端口，本脚本才会创建它）。**本仓库的 `files/etc/config/network` 已经把
+   `tap_eth0` 列进 br-lan 的端口**，所以刷完镜像不需要再去 LuCI 里点一次；换用别的 TAP 名字时，
+   改 UCI 即可，脚本会自动跟着创建。
 
 ## 安全提醒
 
