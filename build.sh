@@ -102,6 +102,26 @@ git clone --depth 1 "${ARGON_FEED_URL}" package/feeds/argon/luci-theme-argon
 git clone --depth 1 "${ARGON_CONFIG_FEED_URL}" package/feeds/argon/luci-app-argon-config
 info "argon theme + config app cloned into package/feeds/argon/"
 
+# Upstream feeds get force-pushed from time to time, which makes 'feeds update'
+# die with "fatal: Not possible to fast-forward" - and because this script runs
+# under set -e it exits *before* Step 4 copies files/, so a later make happily
+# repacks the previous overlay and the image silently misses the latest changes.
+# Re-align any diverged feed to its upstream branch before updating.
+for feed_dir in feeds/*; do
+    [ -d "${feed_dir}/.git" ] || continue
+    feed_name=$(basename "${feed_dir}")
+    if ! git -C "${feed_dir}" fetch -q origin >/dev/null 2>&1; then
+        warn "feed ${feed_name}: fetch failed, leaving it as is"
+        continue
+    fi
+    feed_branch=$(git -C "${feed_dir}" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+    [ -n "${feed_branch}" ] && [ "${feed_branch}" != "HEAD" ] || continue
+    if ! git -C "${feed_dir}" merge-base --is-ancestor HEAD "origin/${feed_branch}" >/dev/null 2>&1; then
+        warn "feed ${feed_name} diverged from origin/${feed_branch} (upstream rewrite) - resetting"
+        git -C "${feed_dir}" reset -q --hard "origin/${feed_branch}"
+    fi
+done
+
 ./scripts/feeds update -a
 ./scripts/feeds install -a
 info "feeds installed"
